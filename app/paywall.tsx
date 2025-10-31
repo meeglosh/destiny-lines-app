@@ -45,25 +45,25 @@ export default function PaywallScreen() {
   };
 
   const handleTestingMode = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(
-      'Testing Mode',
-      'Enter the app without subscribing? This is for testing purposes only.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Enter Testing Mode',
-          onPress: () => {
-            console.log('Entering testing mode - navigating to main app');
-            // Navigate to the main app experience (tabs/home)
-            router.replace('/(tabs)/(home)/');
-          },
-        },
-      ]
-    );
+    console.log('Entering testing mode - navigating to main app');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    
+    // Navigate directly to the main app experience (tabs/home)
+    // Using replace to prevent going back to paywall
+    try {
+      router.replace('/(tabs)/(home)/');
+      console.log('Navigation to /(tabs)/(home)/ initiated');
+    } catch (error) {
+      console.error('Navigation error:', error);
+      // Fallback navigation attempts
+      try {
+        router.push('/(tabs)/(home)/');
+        console.log('Fallback navigation with push initiated');
+      } catch (fallbackError) {
+        console.error('Fallback navigation error:', fallbackError);
+        Alert.alert('Navigation Error', 'Unable to navigate to home screen. Please restart the app.');
+      }
+    }
   };
 
   return (
