@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,6 +18,8 @@ import { IconSymbol } from '@/components/IconSymbol';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -24,6 +27,55 @@ export default function HomeScreen() {
   const [readsRemaining, setReadsRemaining] = useState(20);
   const [maxReads] = useState(20);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [userTier, setUserTier] = useState<'standard' | 'premium'>('standard');
+
+  useEffect(() => {
+    loadUsageStats();
+  }, []);
+
+  const loadUsageStats = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        console.log('No user logged in');
+        return;
+      }
+
+      // Get usage stats
+      const { data: usageData, error: usageError } = await supabase
+        .from('usage_stats')
+        .select('reads_used, reads_limit')
+        .eq('user_id', user.id)
+        .single();
+
+      if (usageError) {
+        console.error('Error loading usage stats:', usageError);
+        return;
+      }
+
+      if (usageData) {
+        const remaining = usageData.reads_limit - usageData.reads_used;
+        setReadsRemaining(Math.max(0, remaining));
+      }
+
+      // Get subscription tier
+      const { data: subData } = await supabase
+        .from('subscriptions')
+        .select('tier')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .single();
+
+      if (subData?.tier) {
+        setUserTier(subData.tier as 'standard' | 'premium');
+      }
+    } catch (error) {
+      console.error('Error in loadUsageStats:', error);
+    }
+  };
 
   const handleCapturePhoto = async () => {
     try {
@@ -31,7 +83,7 @@ export default function HomeScreen() {
 
       // Request camera permissions
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      
+
       if (status !== 'granted') {
         Alert.alert(
           'Camera Permission Required',
@@ -65,7 +117,7 @@ export default function HomeScreen() {
 
       // Request media library permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
+
       if (status !== 'granted') {
         Alert.alert(
           'Photo Library Permission Required',
@@ -97,29 +149,68 @@ export default function HomeScreen() {
     setIsAnalyzing(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    // Simulate analysis (in production, this would call Supabase Edge Function)
-    setTimeout(() => {
-      setIsAnalyzing(false);
-      setReadsRemaining(prev => Math.max(0, prev - 1));
+    try {
+      // Get the current user session
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        Alert.alert('Error', 'Please log in to analyze your palm.');
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Convert image to base64
+      console.log('Converting image to base64...');
+      const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      console.log('Sending request to analyze-palm function...');
+
+      // Call the Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('analyze-palm', {
+        body: {
+          imageBase64: base64,
+          tier: userTier,
+        },
+      });
+
+      console.log('Response received:', data);
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Failed to analyze palm');
+      }
+
+      if (!data.ok) {
+        Alert.alert('Invalid Image', data.reason || 'Please upload a clear photo of your palm.');
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Update local state
+      setReadsRemaining((prev) => Math.max(0, prev - 1));
+
+      // Navigate to results screen
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
+      router.push({
+        pathname: '/reading-result',
+        params: {
+          reading: JSON.stringify(data.reading),
+        },
+      });
+    } catch (error) {
+      console.error('Error analyzing palm:', error);
       Alert.alert(
-        'Analysis Complete! 🔮',
-        'Your palm reading is ready. In the full version, you would see detailed insights about your Heart, Head, Life, and Fate lines.',
-        [
-          {
-            text: 'View Reading',
-            onPress: () => {
-              console.log('Navigate to reading results');
-              // In production: router.push('/reading-result')
-            },
-          },
-          {
-            text: 'OK',
-            style: 'cancel',
-          },
-        ]
+        'Analysis Failed',
+        error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'
       );
-    }, 2000);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const progressPercentage = (readsRemaining / maxReads) * 100;
@@ -139,9 +230,7 @@ export default function HomeScreen() {
         >
           {/* Header */}
           <Animated.View entering={FadeInUp.duration(600)} style={styles.header}>
-            <Text style={[commonStyles.title, styles.title]}>
-              Destiny Lines
-            </Text>
+            <Text style={[commonStyles.title, styles.title]}>Destiny Lines</Text>
             <Text style={[commonStyles.textSecondary, styles.subtitle]}>
               Discover the secrets in your palm
             </Text>
@@ -212,32 +301,41 @@ export default function HomeScreen() {
                 Capture a clear photo of your palm in good lighting for the most accurate reading.
               </Text>
 
+              {/* Analyzing Indicator */}
+              {isAnalyzing && (
+                <View style={styles.analyzingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.analyzingText}>Analyzing your palm...</Text>
+                  <Text style={[commonStyles.textSecondary, styles.analyzingSubtext]}>
+                    This may take a few moments
+                  </Text>
+                </View>
+              )}
+
               {/* Capture Buttons */}
-              <View style={styles.buttonGroup}>
-                <TouchableOpacity
-                  style={[buttonStyles.primary, styles.captureButton]}
-                  onPress={handleCapturePhoto}
-                  disabled={isAnalyzing || readsRemaining === 0}
-                >
-                  <IconSymbol name="camera.fill" size={20} color={colors.background} />
-                  <Text style={[buttonStyles.text, styles.buttonText]}>
-                    {isAnalyzing ? 'Analyzing...' : 'Take Photo'}
-                  </Text>
-                </TouchableOpacity>
+              {!isAnalyzing && (
+                <View style={styles.buttonGroup}>
+                  <TouchableOpacity
+                    style={[buttonStyles.primary, styles.captureButton]}
+                    onPress={handleCapturePhoto}
+                    disabled={isAnalyzing || readsRemaining === 0}
+                  >
+                    <IconSymbol name="camera.fill" size={20} color={colors.background} />
+                    <Text style={[buttonStyles.text, styles.buttonText]}>Take Photo</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[buttonStyles.secondary, styles.uploadButton]}
-                  onPress={handleUploadPhoto}
-                  disabled={isAnalyzing || readsRemaining === 0}
-                >
-                  <IconSymbol name="photo.fill" size={20} color={colors.primary} />
-                  <Text style={[styles.uploadButtonText]}>
-                    Upload Photo
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                  <TouchableOpacity
+                    style={[buttonStyles.secondary, styles.uploadButton]}
+                    onPress={handleUploadPhoto}
+                    disabled={isAnalyzing || readsRemaining === 0}
+                  >
+                    <IconSymbol name="photo.fill" size={20} color={colors.primary} />
+                    <Text style={[styles.uploadButtonText]}>Upload Photo</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-              {readsRemaining === 0 && (
+              {readsRemaining === 0 && !isAnalyzing && (
                 <View style={styles.noReadsContainer}>
                   <Text style={styles.noReadsText}>
                     You&apos;ve used all your readings for this period.
@@ -430,6 +528,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 24,
+  },
+  analyzingContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  analyzingText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.primary,
+    marginTop: 16,
+  },
+  analyzingSubtext: {
+    fontSize: 14,
+    marginTop: 8,
   },
   buttonGroup: {
     gap: 12,
