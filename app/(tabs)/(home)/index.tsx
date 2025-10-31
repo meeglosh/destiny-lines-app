@@ -150,34 +150,41 @@ export default function HomeScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      // BYPASSED FOR TESTING: Authentication check removed
+      console.log('Starting palm analysis...');
+      console.log('Image URI:', imageUri);
+
       // Get the current user session
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      // COMMENTED OUT FOR TESTING - Allow analysis without login
-      // if (!session) {
-      //   Alert.alert('Error', 'Please log in to analyze your palm.');
-      //   setIsAnalyzing(false);
-      //   return;
-      // }
-
-      // Convert image to base64 using the new FileSystem API
+      // Convert image to base64
       console.log('Converting image to base64...');
       let base64: string;
       
       try {
-        // Use the new File API from expo-file-system
-        const fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
+        // Ensure the URI has the correct format
+        let fileUri = imageUri;
+        if (!fileUri.startsWith('file://')) {
+          fileUri = `file://${fileUri}`;
+        }
+
+        console.log('Reading file from:', fileUri);
+
+        // Read the file as base64
         const base64Data = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: 'base64',
+          encoding: FileSystem.EncodingType.Base64,
         });
+
+        if (!base64Data || base64Data.length === 0) {
+          throw new Error('Failed to read image data - empty result');
+        }
+
         base64 = base64Data;
-        console.log('Image converted to base64 successfully');
+        console.log('Image converted to base64 successfully, length:', base64.length);
       } catch (fileError) {
         console.error('Error reading file:', fileError);
-        throw new Error('Failed to read image file');
+        throw new Error(`Failed to read image file: ${fileError instanceof Error ? fileError.message : 'Unknown error'}`);
       }
 
       console.log('Sending request to analyze-palm function...');
@@ -190,12 +197,19 @@ export default function HomeScreen() {
         },
       });
 
-      console.log('Response received:', data);
+      console.log('Response received from Edge Function');
 
       if (error) {
         console.error('Edge function error:', error);
         throw new Error(error.message || 'Failed to analyze palm');
       }
+
+      if (!data) {
+        console.error('No data received from Edge Function');
+        throw new Error('No response from server');
+      }
+
+      console.log('Response data:', JSON.stringify(data).substring(0, 200));
 
       if (!data.ok) {
         Alert.alert('Invalid Image', data.reason || 'Please upload a clear photo of your palm.');
@@ -203,11 +217,18 @@ export default function HomeScreen() {
         return;
       }
 
+      if (!data.reading) {
+        console.error('No reading in response');
+        throw new Error('Invalid response format from server');
+      }
+
       // Update local state
       setReadsRemaining((prev) => Math.max(0, prev - 1));
 
       // Navigate to results screen
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      console.log('Navigating to reading result screen...');
       
       router.push({
         pathname: '/reading-result',
