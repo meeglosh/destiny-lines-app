@@ -163,10 +163,10 @@ export default function HomeScreen() {
       //   return;
       // }
 
-      // Convert image to base64
+      // Convert image to base64 - using string 'base64' instead of deprecated EncodingType
       console.log('Converting image to base64...');
       const base64 = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: 'base64',
       });
 
       console.log('Sending request to analyze-palm function...');
