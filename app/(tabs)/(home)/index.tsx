@@ -163,11 +163,22 @@ export default function HomeScreen() {
       //   return;
       // }
 
-      // Convert image to base64 - using string 'base64' instead of deprecated EncodingType
+      // Convert image to base64 using the new FileSystem API
       console.log('Converting image to base64...');
-      const base64 = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: 'base64',
-      });
+      let base64: string;
+      
+      try {
+        // Use the new File API from expo-file-system
+        const fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
+        const base64Data = await FileSystem.readAsStringAsync(fileUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        base64 = base64Data;
+        console.log('Image converted to base64 successfully');
+      } catch (fileError) {
+        console.error('Error reading file:', fileError);
+        throw new Error('Failed to read image file');
+      }
 
       console.log('Sending request to analyze-palm function...');
 
