@@ -18,7 +18,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
@@ -171,9 +171,9 @@ export default function HomeScreen() {
 
         console.log('Reading file from:', fileUri);
 
-        // Read the file as base64 - using string literal instead of EncodingType enum
+        // Read the file as base64 using legacy API
         const base64Data = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: 'base64',
+          encoding: FileSystem.EncodingType.Base64,
         });
 
         if (!base64Data || base64Data.length === 0) {
