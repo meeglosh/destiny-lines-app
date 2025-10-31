@@ -171,7 +171,7 @@ export default function HomeScreen() {
         // Use the new File API from expo-file-system
         const fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
         const base64Data = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: 'base64',
         });
         base64 = base64Data;
         console.log('Image converted to base64 successfully');
