@@ -57,8 +57,9 @@ export default function PaywallScreen() {
         {
           text: 'Enter Testing Mode',
           onPress: () => {
-            console.log('Entering testing mode');
-            router.replace('/(tabs)/(home)');
+            console.log('Entering testing mode - navigating to main app');
+            // Navigate to the main app experience (tabs/home)
+            router.replace('/(tabs)/(home)/');
           },
         },
       ]
