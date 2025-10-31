@@ -1,10 +1,34 @@
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 
 export function useSupabaseAuth() {
   const { setUser, setSession, setLoading } = useAuthStore();
+
+  const fetchUserData = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user data:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        setUser(data);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error in fetchUserData:', error);
+      setLoading(false);
+    }
+  }, [setUser, setLoading]);
 
   useEffect(() => {
     console.log('Setting up Supabase auth listener');
@@ -35,29 +59,5 @@ export function useSupabaseAuth() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
-
-  const fetchUserData = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching user data:', error);
-        setLoading(false);
-        return;
-      }
-
-      if (data) {
-        setUser(data);
-      }
-      setLoading(false);
-    } catch (error) {
-      console.error('Error in fetchUserData:', error);
-      setLoading(false);
-    }
-  };
+  }, [fetchUserData, setSession, setUser, setLoading]);
 }
