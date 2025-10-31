@@ -9,6 +9,7 @@ import {
   Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -112,7 +113,15 @@ export default function IntroScreen() {
                   style={styles.iconContainer}
                 >
                   <View style={styles.iconCircle}>
-                    <IconSymbol name={slide.icon} size={80} color={colors.primary} />
+                    {index === 0 ? (
+                      <Image
+                        source={require('@/assets/images/852cc84f-9c71-48c9-b534-1f0a40211835.png')}
+                        style={styles.heroImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <IconSymbol name={slide.icon} size={80} color={colors.primary} />
+                    )}
                   </View>
                 </Animated.View>
 
@@ -227,6 +236,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(178, 255, 89, 0.3)',
+    overflow: 'hidden',
+  },
+  heroImage: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
   },
   textContainer: {
     alignItems: 'center',
