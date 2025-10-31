@@ -16,6 +16,7 @@ import { colors, commonStyles, buttonStyles } from '@/styles/commonStyles';
 import { SUBSCRIPTION_TIERS } from '@/utils/constants';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { IconSymbol } from '@/components/IconSymbol';
+import * as Haptics from 'expo-haptics';
 
 const { width } = Dimensions.get('window');
 
@@ -23,6 +24,7 @@ export default function PaywallScreen() {
   const [selectedTier, setSelectedTier] = useState<'standard' | 'premium'>('premium');
 
   const handleSubscribe = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert(
       'Coming Soon',
       `You selected the ${SUBSCRIPTION_TIERS[selectedTier].name} plan. In-app purchases will be integrated soon!`,
@@ -30,8 +32,7 @@ export default function PaywallScreen() {
         {
           text: 'OK',
           onPress: () => {
-            // For now, navigate to the main app
-            router.push('/(tabs)/(home)');
+            console.log('User acknowledged subscription coming soon');
           },
         },
       ]
@@ -39,7 +40,29 @@ export default function PaywallScreen() {
   };
 
   const handleRestore = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert('Restore Purchases', 'This feature will be available once IAP is integrated.');
+  };
+
+  const handleTestingMode = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert(
+      'Testing Mode',
+      'Enter the app without subscribing? This is for testing purposes only.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Enter Testing Mode',
+          onPress: () => {
+            console.log('Entering testing mode');
+            router.replace('/(tabs)/(home)');
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -120,7 +143,10 @@ export default function PaywallScreen() {
                 styles.tierCard,
                 selectedTier === 'standard' && styles.tierCardSelected,
               ]}
-              onPress={() => setSelectedTier('standard')}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSelectedTier('standard');
+              }}
               activeOpacity={0.8}
             >
               <LinearGradient
@@ -164,7 +190,10 @@ export default function PaywallScreen() {
                 styles.tierCard,
                 selectedTier === 'premium' && styles.tierCardSelected,
               ]}
-              onPress={() => setSelectedTier('premium')}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSelectedTier('premium');
+              }}
               activeOpacity={0.8}
             >
               <LinearGradient
@@ -223,6 +252,11 @@ export default function PaywallScreen() {
 
             <TouchableOpacity style={styles.restoreButton} onPress={handleRestore}>
               <Text style={styles.restoreText}>Restore Purchases</Text>
+            </TouchableOpacity>
+
+            {/* Testing Mode Button */}
+            <TouchableOpacity style={styles.testingButton} onPress={handleTestingMode}>
+              <Text style={styles.testingText}>🧪 Enter Testing Mode</Text>
             </TouchableOpacity>
 
             <Text style={[commonStyles.textSecondary, styles.disclaimer]}>
@@ -366,6 +400,19 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   restoreText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  testingButton: {
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(178, 255, 89, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(178, 255, 89, 0.3)',
+  },
+  testingText: {
     color: colors.primary,
     fontSize: 14,
     fontWeight: '600',
