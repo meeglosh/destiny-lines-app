@@ -150,13 +150,9 @@ export default function HomeScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      console.log('Starting palm analysis...');
+      console.log('=== Starting Palm Analysis ===');
       console.log('Image URI:', imageUri);
-
-      // Get the current user session
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      console.log('User Tier:', userTier);
 
       // Convert image to base64
       console.log('Converting image to base64...');
@@ -181,15 +177,22 @@ export default function HomeScreen() {
         }
 
         base64 = base64Data;
-        console.log('Image converted to base64 successfully, length:', base64.length);
+        console.log('✓ Image converted to base64 successfully');
+        console.log('  Base64 length:', base64.length);
+        console.log('  First 50 chars:', base64.substring(0, 50));
       } catch (fileError) {
-        console.error('Error reading file:', fileError);
+        console.error('✗ Error reading file:', fileError);
         throw new Error(`Failed to read image file: ${fileError instanceof Error ? fileError.message : 'Unknown error'}`);
       }
 
-      console.log('Sending request to analyze-palm function...');
+      console.log('Preparing request to Edge Function...');
+      console.log('Request body:', {
+        tier: userTier,
+        imageBase64Length: base64.length,
+      });
 
       // Call the Supabase Edge Function
+      console.log('Invoking analyze-palm Edge Function...');
       const { data, error } = await supabase.functions.invoke('analyze-palm', {
         body: {
           imageBase64: base64,
@@ -197,30 +200,38 @@ export default function HomeScreen() {
         },
       });
 
-      console.log('Response received from Edge Function');
+      console.log('Edge Function response received');
 
       if (error) {
-        console.error('Edge function error:', error);
+        console.error('✗ Edge Function error:', error);
+        console.error('  Error message:', error.message);
+        console.error('  Error details:', JSON.stringify(error));
         throw new Error(error.message || 'Failed to analyze palm');
       }
 
       if (!data) {
-        console.error('No data received from Edge Function');
+        console.error('✗ No data received from Edge Function');
         throw new Error('No response from server');
       }
 
-      console.log('Response data:', JSON.stringify(data).substring(0, 200));
+      console.log('✓ Response data received');
+      console.log('  Response preview:', JSON.stringify(data).substring(0, 200));
 
       if (!data.ok) {
+        console.log('⚠ Image validation failed');
+        console.log('  Reason:', data.reason);
         Alert.alert('Invalid Image', data.reason || 'Please upload a clear photo of your palm.');
         setIsAnalyzing(false);
         return;
       }
 
       if (!data.reading) {
-        console.error('No reading in response');
+        console.error('✗ No reading in response');
         throw new Error('Invalid response format from server');
       }
+
+      console.log('✓ Reading received successfully');
+      console.log('  Summary length:', data.reading.summary?.length || 0);
 
       // Update local state
       setReadsRemaining((prev) => Math.max(0, prev - 1));
@@ -236,8 +247,14 @@ export default function HomeScreen() {
           reading: JSON.stringify(data.reading),
         },
       });
+
+      console.log('=== Palm Analysis Complete ===');
     } catch (error) {
-      console.error('Error analyzing palm:', error);
+      console.error('=== Palm Analysis Failed ===');
+      console.error('Error:', error);
+      console.error('Error type:', error?.constructor?.name);
+      console.error('Error message:', error instanceof Error ? error.message : String(error));
+      
       Alert.alert(
         'Analysis Failed',
         error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'

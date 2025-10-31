@@ -36,28 +36,11 @@ Deno.serve(async (req) => {
   try {
     console.log('=== Palm Analysis Request Started ===');
     console.log('Method:', req.method);
-    console.log('Headers:', Object.fromEntries(req.headers.entries()));
 
     // Parse request body
-    let body: PalmReadingRequest;
-    try {
-      const rawBody = await req.text();
-      console.log('Raw body length:', rawBody.length);
-      body = JSON.parse(rawBody);
-      console.log('Parsed body - tier:', body.tier, 'imageBase64 length:', body.imageBase64?.length || 0);
-    } catch (parseError) {
-      console.error('Failed to parse request body:', parseError);
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          reason: 'Invalid request format',
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
+    const body: PalmReadingRequest = await req.json();
+    console.log('Request received - tier:', body.tier);
+    console.log('Image data length:', body.imageBase64?.length || 0);
 
     const { imageBase64, tier } = body;
 
@@ -148,75 +131,53 @@ Target approximately ${wordCount} words total for the reading.`;
 
     console.log('Calling OpenAI API...');
     console.log('Model: gpt-4o-mini');
-    console.log('Max tokens:', isPremium ? 2000 : 800);
 
     // Call OpenAI Vision API
-    let openaiResponse: Response;
-    try {
-      openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiApiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt,
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Please analyze this palm image and provide a detailed reading.',
+    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Please analyze this palm image and provide a detailed reading.',
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${imageBase64}`,
+                  detail: 'high',
                 },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/jpeg;base64,${imageBase64}`,
-                  },
-                },
-              ],
-            },
-          ],
-          max_tokens: isPremium ? 2000 : 800,
-          temperature: 0.7,
-        }),
-      });
-    } catch (fetchError) {
-      console.error('Failed to call OpenAI API:', fetchError);
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          reason: 'Failed to connect to AI service',
-        }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
+              },
+            ],
+          },
+        ],
+        max_tokens: isPremium ? 2000 : 800,
+        temperature: 0.7,
+      }),
+    });
 
     console.log('OpenAI response status:', openaiResponse.status);
 
     if (!openaiResponse.ok) {
-      let errorData: any;
-      try {
-        errorData = await openaiResponse.json();
-        console.error('OpenAI API error:', JSON.stringify(errorData));
-      } catch {
-        const errorText = await openaiResponse.text();
-        console.error('OpenAI API error (text):', errorText);
-        errorData = { error: { message: errorText } };
-      }
+      const errorText = await openaiResponse.text();
+      console.error('OpenAI API error:', errorText);
 
       return new Response(
         JSON.stringify({
           ok: false,
-          reason: `AI service error: ${errorData.error?.message || 'Unknown error'}`,
+          reason: `AI service error: ${openaiResponse.status} - ${errorText.substring(0, 100)}`,
         }),
         {
           status: 502,
@@ -227,7 +188,6 @@ Target approximately ${wordCount} words total for the reading.`;
 
     const openaiData = await openaiResponse.json();
     console.log('OpenAI response received successfully');
-    console.log('Choices:', openaiData.choices?.length || 0);
 
     // Parse the response
     const content = openaiData.choices?.[0]?.message?.content;
@@ -246,18 +206,22 @@ Target approximately ${wordCount} words total for the reading.`;
     }
 
     console.log('Content received, length:', content.length);
-    console.log('Content preview:', content.substring(0, 200));
 
     // Try to parse JSON from the response
     let result: PalmReadingResponse;
     try {
       // Remove markdown code blocks if present
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const cleanContent = content
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+      
       result = JSON.parse(cleanContent);
       console.log('Successfully parsed response JSON');
     } catch (parseError) {
       console.error('Failed to parse OpenAI response as JSON:', parseError);
-      console.error('Content was:', content);
+      console.error('Content was:', content.substring(0, 500));
+      
       return new Response(
         JSON.stringify({
           ok: false,
@@ -278,9 +242,7 @@ Target approximately ${wordCount} words total for the reading.`;
     });
   } catch (error) {
     console.error('=== Unhandled Error in Palm Analysis ===');
-    console.error('Error type:', error?.constructor?.name);
-    console.error('Error message:', error instanceof Error ? error.message : String(error));
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('Error:', error);
 
     return new Response(
       JSON.stringify({
