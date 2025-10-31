@@ -171,9 +171,9 @@ export default function HomeScreen() {
 
         console.log('Reading file from:', fileUri);
 
-        // Read the file as base64
+        // Read the file as base64 - using string literal instead of EncodingType enum
         const base64Data = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: FileSystem.EncodingType.Base64,
+          encoding: 'base64',
         });
 
         if (!base64Data || base64Data.length === 0) {
