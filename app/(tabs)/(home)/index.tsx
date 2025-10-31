@@ -40,7 +40,7 @@ export default function HomeScreen() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        console.log('No user logged in');
+        console.log('No user logged in - using default values for testing');
         return;
       }
 
@@ -150,16 +150,18 @@ export default function HomeScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
+      // BYPASSED FOR TESTING: Authentication check removed
       // Get the current user session
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (!session) {
-        Alert.alert('Error', 'Please log in to analyze your palm.');
-        setIsAnalyzing(false);
-        return;
-      }
+      // COMMENTED OUT FOR TESTING - Allow analysis without login
+      // if (!session) {
+      //   Alert.alert('Error', 'Please log in to analyze your palm.');
+      //   setIsAnalyzing(false);
+      //   return;
+      // }
 
       // Convert image to base64
       console.log('Converting image to base64...');

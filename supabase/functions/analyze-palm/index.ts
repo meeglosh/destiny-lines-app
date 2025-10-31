@@ -35,30 +35,36 @@ serve(async (req) => {
   }
 
   try {
+    // BYPASSED FOR TESTING: Authentication check removed
     // Get the authorization header
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
-    }
-
+    
     // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: {
-        headers: { Authorization: authHeader },
+        headers: authHeader ? { Authorization: authHeader } : {},
       },
     });
 
-    // Verify user is authenticated
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    // COMMENTED OUT FOR TESTING - Allow analysis without authentication
+    // if (!authHeader) {
+    //   throw new Error('Missing authorization header');
+    // }
 
-    if (userError || !user) {
-      throw new Error('Unauthorized');
-    }
+    // Verify user is authenticated
+    // const {
+    //   data: { user },
+    //   error: userError,
+    // } = await supabase.auth.getUser();
+
+    // if (userError || !user) {
+    //   throw new Error('Unauthorized');
+    // }
+
+    // For testing, use a dummy user ID
+    const user = { id: 'test-user-id' };
 
     // Parse request body
     const { imageBase64, tier }: PalmReadingRequest = await req.json();
@@ -172,36 +178,39 @@ Target approximately ${wordCount} words total for the reading.`;
       throw new Error('Failed to parse palm reading response');
     }
 
+    // COMMENTED OUT FOR TESTING - Skip database operations when not authenticated
     // If the reading is valid, save it to the database
-    if (result.ok && result.reading) {
-      const { error: insertError } = await supabase.from('readings').insert({
-        user_id: user.id,
-        summary: result.reading.summary,
-        heart_line: result.reading.heartLine,
-        head_line: result.reading.headLine,
-        life_line: result.reading.lifeLine,
-        fate_line: result.reading.fateLine,
-        marks: result.reading.marks,
-        deeper_insights: result.reading.deeperInsights || null,
-        prompts: result.reading.prompts || null,
-        practices: result.reading.practices || null,
-        is_premium: isPremium,
-      });
+    // if (result.ok && result.reading) {
+    //   const { error: insertError } = await supabase.from('readings').insert({
+    //     user_id: user.id,
+    //     summary: result.reading.summary,
+    //     heart_line: result.reading.heartLine,
+    //     head_line: result.reading.headLine,
+    //     life_line: result.reading.lifeLine,
+    //     fate_line: result.reading.fateLine,
+    //     marks: result.reading.marks,
+    //     deeper_insights: result.reading.deeperInsights || null,
+    //     prompts: result.reading.prompts || null,
+    //     practices: result.reading.practices || null,
+    //     is_premium: isPremium,
+    //   });
 
-      if (insertError) {
-        console.error('Failed to save reading:', insertError);
-        // Don't throw - still return the reading to the user
-      }
+    //   if (insertError) {
+    //     console.error('Failed to save reading:', insertError);
+    //     // Don't throw - still return the reading to the user
+    //   }
 
-      // Update usage stats
-      const { error: usageError } = await supabase.rpc('increment_reads_used', {
-        p_user_id: user.id,
-      });
+    //   // Update usage stats
+    //   const { error: usageError } = await supabase.rpc('increment_reads_used', {
+    //     p_user_id: user.id,
+    //   });
 
-      if (usageError) {
-        console.error('Failed to update usage stats:', usageError);
-      }
-    }
+    //   if (usageError) {
+    //     console.error('Failed to update usage stats:', usageError);
+    //   }
+    // }
+
+    console.log('Returning palm reading result (testing mode - no DB save)');
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
