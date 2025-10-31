@@ -1,6 +1,5 @@
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,58 +27,88 @@ interface PalmReadingResponse {
   };
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // BYPASSED FOR TESTING: Authentication check removed
-    // Get the authorization header
-    const authHeader = req.headers.get('Authorization');
-    
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: authHeader ? { Authorization: authHeader } : {},
-      },
-    });
-
-    // COMMENTED OUT FOR TESTING - Allow analysis without authentication
-    // if (!authHeader) {
-    //   throw new Error('Missing authorization header');
-    // }
-
-    // Verify user is authenticated
-    // const {
-    //   data: { user },
-    //   error: userError,
-    // } = await supabase.auth.getUser();
-
-    // if (userError || !user) {
-    //   throw new Error('Unauthorized');
-    // }
-
-    // For testing, use a dummy user ID
-    const user = { id: 'test-user-id' };
+    console.log('=== Palm Analysis Request Started ===');
+    console.log('Method:', req.method);
+    console.log('Headers:', Object.fromEntries(req.headers.entries()));
 
     // Parse request body
-    const { imageBase64, tier }: PalmReadingRequest = await req.json();
-
-    if (!imageBase64) {
-      throw new Error('Missing image data');
+    let body: PalmReadingRequest;
+    try {
+      const rawBody = await req.text();
+      console.log('Raw body length:', rawBody.length);
+      body = JSON.parse(rawBody);
+      console.log('Parsed body - tier:', body.tier, 'imageBase64 length:', body.imageBase64?.length || 0);
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Invalid request format',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
-    console.log('Analyzing palm for user:', user.id, 'tier:', tier);
+    const { imageBase64, tier } = body;
+
+    if (!imageBase64) {
+      console.error('Missing image data');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Missing image data',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Validate base64 image
+    if (imageBase64.length < 100) {
+      console.error('Image data too short:', imageBase64.length);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Invalid image data - too short',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    console.log('Image validation passed');
 
     // Get OpenAI API key from environment
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
+      console.error('OpenAI API key not configured');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Service configuration error',
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
+
+    console.log('OpenAI API key found');
 
     // Prepare the prompt based on tier
     const isPremium = tier === 'premium';
@@ -117,55 +146,107 @@ If the image is not a valid palm image, return:
 
 Target approximately ${wordCount} words total for the reading.`;
 
+    console.log('Calling OpenAI API...');
+    console.log('Model: gpt-4o-mini');
+    console.log('Max tokens:', isPremium ? 2000 : 800);
+
     // Call OpenAI Vision API
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Please analyze this palm image and provide a detailed reading.',
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
+    let openaiResponse: Response;
+    try {
+      openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Please analyze this palm image and provide a detailed reading.',
                 },
-              },
-            ],
-          },
-        ],
-        max_tokens: isPremium ? 2000 : 800,
-        temperature: 0.7,
-      }),
-    });
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/jpeg;base64,${imageBase64}`,
+                  },
+                },
+              ],
+            },
+          ],
+          max_tokens: isPremium ? 2000 : 800,
+          temperature: 0.7,
+        }),
+      });
+    } catch (fetchError) {
+      console.error('Failed to call OpenAI API:', fetchError);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Failed to connect to AI service',
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    console.log('OpenAI response status:', openaiResponse.status);
 
     if (!openaiResponse.ok) {
-      const errorData = await openaiResponse.json();
-      console.error('OpenAI API error:', errorData);
-      throw new Error(`OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
+      let errorData: any;
+      try {
+        errorData = await openaiResponse.json();
+        console.error('OpenAI API error:', JSON.stringify(errorData));
+      } catch {
+        const errorText = await openaiResponse.text();
+        console.error('OpenAI API error (text):', errorText);
+        errorData = { error: { message: errorText } };
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: `AI service error: ${errorData.error?.message || 'Unknown error'}`,
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
     const openaiData = await openaiResponse.json();
-    console.log('OpenAI response received');
+    console.log('OpenAI response received successfully');
+    console.log('Choices:', openaiData.choices?.length || 0);
 
     // Parse the response
-    const content = openaiData.choices[0]?.message?.content;
+    const content = openaiData.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error('No response from OpenAI');
+      console.error('No content in OpenAI response');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'No response from AI service',
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
+
+    console.log('Content received, length:', content.length);
+    console.log('Content preview:', content.substring(0, 200));
 
     // Try to parse JSON from the response
     let result: PalmReadingResponse;
@@ -173,50 +254,34 @@ Target approximately ${wordCount} words total for the reading.`;
       // Remove markdown code blocks if present
       const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       result = JSON.parse(cleanContent);
+      console.log('Successfully parsed response JSON');
     } catch (parseError) {
-      console.error('Failed to parse OpenAI response:', content);
-      throw new Error('Failed to parse palm reading response');
+      console.error('Failed to parse OpenAI response as JSON:', parseError);
+      console.error('Content was:', content);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Failed to parse AI response',
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
-    // COMMENTED OUT FOR TESTING - Skip database operations when not authenticated
-    // If the reading is valid, save it to the database
-    // if (result.ok && result.reading) {
-    //   const { error: insertError } = await supabase.from('readings').insert({
-    //     user_id: user.id,
-    //     summary: result.reading.summary,
-    //     heart_line: result.reading.heartLine,
-    //     head_line: result.reading.headLine,
-    //     life_line: result.reading.lifeLine,
-    //     fate_line: result.reading.fateLine,
-    //     marks: result.reading.marks,
-    //     deeper_insights: result.reading.deeperInsights || null,
-    //     prompts: result.reading.prompts || null,
-    //     practices: result.reading.practices || null,
-    //     is_premium: isPremium,
-    //   });
-
-    //   if (insertError) {
-    //     console.error('Failed to save reading:', insertError);
-    //     // Don't throw - still return the reading to the user
-    //   }
-
-    //   // Update usage stats
-    //   const { error: usageError } = await supabase.rpc('increment_reads_used', {
-    //     p_user_id: user.id,
-    //   });
-
-    //   if (usageError) {
-    //     console.error('Failed to update usage stats:', usageError);
-    //   }
-    // }
-
-    console.log('Returning palm reading result (testing mode - no DB save)');
+    console.log('=== Palm Analysis Request Completed Successfully ===');
 
     return new Response(JSON.stringify(result), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
-    console.error('Error in analyze-palm function:', error);
+    console.error('=== Unhandled Error in Palm Analysis ===');
+    console.error('Error type:', error?.constructor?.name);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+
     return new Response(
       JSON.stringify({
         ok: false,
