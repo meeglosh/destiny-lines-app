@@ -8,7 +8,6 @@ import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { colors } from '@/styles/commonStyles';
 import { 
   Inter_400Regular, 
@@ -25,8 +24,6 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutContent() {
-  useSupabaseAuth();
-
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
     Inter: Inter_400Regular,
@@ -56,9 +53,9 @@ function RootLayoutContent() {
         }}
       >
         <Stack.Screen name="index" />
+        <Stack.Screen name="paywall" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="auth" />
-        <Stack.Screen name="paywall" />
         <Stack.Screen name="(tabs)" />
       </Stack>
       <SystemBars style="light" />
