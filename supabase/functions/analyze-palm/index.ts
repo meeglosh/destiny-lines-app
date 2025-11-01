@@ -36,20 +36,53 @@ Deno.serve(async (req) => {
   try {
     console.log('=== Palm Analysis Request Started ===');
     console.log('Method:', req.method);
+    console.log('Headers:', Object.fromEntries(req.headers.entries()));
 
-    // Parse request body
-    const body: PalmReadingRequest = await req.json();
-    console.log('Request received - tier:', body.tier);
-    console.log('Image data length:', body.imageBase64?.length || 0);
+    // Parse request body with error handling
+    let body: PalmReadingRequest;
+    try {
+      body = await req.json();
+      console.log('Request body parsed successfully');
+      console.log('Tier:', body.tier);
+      console.log('Image data present:', !!body.imageBase64);
+      console.log('Image data length:', body.imageBase64?.length || 0);
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Invalid request format',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
     const { imageBase64, tier } = body;
 
+    // Validate required fields
     if (!imageBase64) {
       console.error('Missing image data');
       return new Response(
         JSON.stringify({
           ok: false,
           reason: 'Missing image data',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    if (!tier || (tier !== 'standard' && tier !== 'premium')) {
+      console.error('Invalid tier:', tier);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Invalid subscription tier',
         }),
         {
           status: 400,
@@ -73,7 +106,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('Image validation passed');
+    console.log('✓ Image validation passed');
 
     // Get OpenAI API key from environment
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
@@ -82,7 +115,7 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({
           ok: false,
-          reason: 'Service configuration error',
+          reason: 'Service configuration error - API key missing',
         }),
         {
           status: 500,
@@ -91,7 +124,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('OpenAI API key found');
+    console.log('✓ OpenAI API key found');
 
     // Prepare the prompt based on tier
     const isPremium = tier === 'premium';
@@ -100,6 +133,8 @@ Deno.serve(async (req) => {
     const systemPrompt = `You are an expert palm reader with deep knowledge of palmistry. 
 Analyze the palm image and provide insights in a positive, encouraging tone. 
 Never make medical, legal, or financial claims. This is for entertainment purposes only.
+
+IMPORTANT: You must respond with ONLY valid JSON. Do not include any markdown formatting, code blocks, or explanatory text.
 
 Return your response as a JSON object with the following structure:
 {
@@ -131,53 +166,72 @@ Target approximately ${wordCount} words total for the reading.`;
 
     console.log('Calling OpenAI API...');
     console.log('Model: gpt-4o-mini');
+    console.log('Max tokens:', isPremium ? 2000 : 800);
 
-    // Call OpenAI Vision API
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Please analyze this palm image and provide a detailed reading.',
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
-                  detail: 'high',
+    // Call OpenAI Vision API with timeout
+    let openaiResponse: Response;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+
+      openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Please analyze this palm image and provide a detailed reading. Respond with ONLY valid JSON, no markdown formatting.',
                 },
-              },
-            ],
-          },
-        ],
-        max_tokens: isPremium ? 2000 : 800,
-        temperature: 0.7,
-      }),
-    });
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/jpeg;base64,${imageBase64}`,
+                    detail: 'high',
+                  },
+                },
+              ],
+            },
+          ],
+          max_tokens: isPremium ? 2000 : 800,
+          temperature: 0.7,
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
 
-    console.log('OpenAI response status:', openaiResponse.status);
-
-    if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error('OpenAI API error:', errorText);
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      console.error('OpenAI API fetch error:', fetchError);
+      
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            reason: 'Request timeout - please try again',
+          }),
+          {
+            status: 504,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
 
       return new Response(
         JSON.stringify({
           ok: false,
-          reason: `AI service error: ${openaiResponse.status} - ${errorText.substring(0, 100)}`,
+          reason: `Network error: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
         }),
         {
           status: 502,
@@ -186,13 +240,64 @@ Target approximately ${wordCount} words total for the reading.`;
       );
     }
 
-    const openaiData = await openaiResponse.json();
-    console.log('OpenAI response received successfully');
+    console.log('OpenAI response status:', openaiResponse.status);
+    console.log('OpenAI response headers:', Object.fromEntries(openaiResponse.headers.entries()));
 
-    // Parse the response
+    if (!openaiResponse.ok) {
+      const errorText = await openaiResponse.text();
+      console.error('OpenAI API error response:', errorText);
+
+      let errorMessage = 'AI service error';
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error?.message || errorMessage;
+      } catch {
+        // If not JSON, use the text directly
+        errorMessage = errorText.substring(0, 100);
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: `AI service error: ${errorMessage}`,
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Parse OpenAI response
+    let openaiData: any;
+    try {
+      openaiData = await openaiResponse.json();
+      console.log('✓ OpenAI response parsed successfully');
+      console.log('Response structure:', {
+        hasChoices: !!openaiData.choices,
+        choicesLength: openaiData.choices?.length,
+        hasMessage: !!openaiData.choices?.[0]?.message,
+        hasContent: !!openaiData.choices?.[0]?.message?.content,
+      });
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response:', parseError);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Failed to parse AI response',
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Extract content
     const content = openaiData.choices?.[0]?.message?.content;
     if (!content) {
       console.error('No content in OpenAI response');
+      console.error('Full response:', JSON.stringify(openaiData));
       return new Response(
         JSON.stringify({
           ok: false,
@@ -205,27 +310,56 @@ Target approximately ${wordCount} words total for the reading.`;
       );
     }
 
-    console.log('Content received, length:', content.length);
+    console.log('✓ Content received, length:', content.length);
+    console.log('Content preview:', content.substring(0, 200));
 
-    // Try to parse JSON from the response
+    // Parse the AI response
     let result: PalmReadingResponse;
     try {
-      // Remove markdown code blocks if present
-      const cleanContent = content
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
-        .trim();
+      // Remove any markdown code blocks if present
+      let cleanContent = content.trim();
       
+      // Remove markdown code blocks
+      cleanContent = cleanContent.replace(/```json\s*/g, '');
+      cleanContent = cleanContent.replace(/```\s*/g, '');
+      
+      // Try to find JSON object in the content
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanContent = jsonMatch[0];
+      }
+      
+      console.log('Attempting to parse cleaned content...');
       result = JSON.parse(cleanContent);
-      console.log('Successfully parsed response JSON');
+      console.log('✓ Successfully parsed response JSON');
+      console.log('Result structure:', {
+        ok: result.ok,
+        hasReading: !!result.reading,
+        hasReason: !!result.reason,
+      });
     } catch (parseError) {
-      console.error('Failed to parse OpenAI response as JSON:', parseError);
-      console.error('Content was:', content.substring(0, 500));
+      console.error('Failed to parse AI response as JSON:', parseError);
+      console.error('Content was:', content);
       
       return new Response(
         JSON.stringify({
           ok: false,
-          reason: 'Failed to parse AI response',
+          reason: 'Failed to parse AI response - invalid format',
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Validate the result structure
+    if (result.ok && !result.reading) {
+      console.error('Invalid result: ok=true but no reading');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: 'Invalid AI response structure',
         }),
         {
           status: 500,
@@ -242,7 +376,9 @@ Target approximately ${wordCount} words total for the reading.`;
     });
   } catch (error) {
     console.error('=== Unhandled Error in Palm Analysis ===');
-    console.error('Error:', error);
+    console.error('Error type:', error?.constructor?.name);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
 
     return new Response(
       JSON.stringify({

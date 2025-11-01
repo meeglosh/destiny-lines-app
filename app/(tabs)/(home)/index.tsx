@@ -186,52 +186,94 @@ export default function HomeScreen() {
       }
 
       console.log('Preparing request to Edge Function...');
-      console.log('Request body:', {
+      const requestBody = {
+        imageBase64: base64,
         tier: userTier,
-        imageBase64Length: base64.length,
+      };
+      console.log('Request body structure:', {
+        tier: requestBody.tier,
+        imageBase64Length: requestBody.imageBase64.length,
       });
 
       // Call the Supabase Edge Function
       console.log('Invoking analyze-palm Edge Function...');
+      const startTime = Date.now();
+      
       const { data, error } = await supabase.functions.invoke('analyze-palm', {
-        body: {
-          imageBase64: base64,
-          tier: userTier,
-        },
+        body: requestBody,
       });
 
-      console.log('Edge Function response received');
+      const duration = Date.now() - startTime;
+      console.log(`Edge Function response received in ${duration}ms`);
 
       if (error) {
         console.error('✗ Edge Function error:', error);
+        console.error('  Error type:', typeof error);
+        console.error('  Error keys:', Object.keys(error));
         console.error('  Error message:', error.message);
-        console.error('  Error details:', JSON.stringify(error));
-        throw new Error(error.message || 'Failed to analyze palm');
+        console.error('  Error context:', error.context);
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to analyze palm';
+        
+        if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        // Check for specific error types
+        if (error.message?.includes('timeout')) {
+          errorMessage = 'Request timed out. Please try again with a smaller image.';
+        } else if (error.message?.includes('network')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (error.message?.includes('API key')) {
+          errorMessage = 'Service configuration error. Please contact support.';
+        }
+        
+        throw new Error(errorMessage);
       }
 
       if (!data) {
         console.error('✗ No data received from Edge Function');
-        throw new Error('No response from server');
+        throw new Error('No response from server. Please try again.');
       }
 
       console.log('✓ Response data received');
-      console.log('  Response preview:', JSON.stringify(data).substring(0, 200));
+      console.log('  Response type:', typeof data);
+      console.log('  Response keys:', Object.keys(data));
+      console.log('  Response.ok:', data.ok);
 
       if (!data.ok) {
         console.log('⚠ Image validation failed');
         console.log('  Reason:', data.reason);
-        Alert.alert('Invalid Image', data.reason || 'Please upload a clear photo of your palm.');
+        
+        Alert.alert(
+          'Invalid Image',
+          data.reason || 'Please upload a clear photo of your palm with good lighting.',
+          [{ text: 'OK' }]
+        );
         setIsAnalyzing(false);
         return;
       }
 
       if (!data.reading) {
         console.error('✗ No reading in response');
+        console.error('  Full response:', JSON.stringify(data));
         throw new Error('Invalid response format from server');
       }
 
       console.log('✓ Reading received successfully');
+      console.log('  Reading keys:', Object.keys(data.reading));
       console.log('  Summary length:', data.reading.summary?.length || 0);
+      console.log('  Heart line length:', data.reading.heartLine?.length || 0);
+
+      // Validate reading structure
+      const requiredFields = ['summary', 'heartLine', 'headLine', 'lifeLine', 'fateLine', 'marks'];
+      const missingFields = requiredFields.filter(field => !data.reading[field]);
+      
+      if (missingFields.length > 0) {
+        console.error('✗ Missing required fields:', missingFields);
+        throw new Error('Incomplete reading data received');
+      }
 
       // Update local state
       setReadsRemaining((prev) => Math.max(0, prev - 1));
@@ -254,10 +296,28 @@ export default function HomeScreen() {
       console.error('Error:', error);
       console.error('Error type:', error?.constructor?.name);
       console.error('Error message:', error instanceof Error ? error.message : String(error));
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+      
+      // Provide user-friendly error message
+      let userMessage = 'An unexpected error occurred. Please try again.';
+      
+      if (error instanceof Error) {
+        userMessage = error.message;
+      }
       
       Alert.alert(
         'Analysis Failed',
-        error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'
+        userMessage,
+        [
+          {
+            text: 'Try Again',
+            onPress: () => console.log('User will retry'),
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
       );
     } finally {
       setIsAnalyzing(false);
@@ -358,7 +418,7 @@ export default function HomeScreen() {
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text style={styles.analyzingText}>Analyzing your palm...</Text>
                   <Text style={[commonStyles.textSecondary, styles.analyzingSubtext]}>
-                    This may take a few moments
+                    This may take up to 30 seconds
                   </Text>
                 </View>
               )}
