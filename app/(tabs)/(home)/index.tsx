@@ -10,7 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { colors, commonStyles, buttonStyles } from '@/styles/commonStyles';
@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase';
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const [readsRemaining, setReadsRemaining] = useState(20);
   const [maxReads] = useState(20);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -264,7 +265,7 @@ export default function HomeScreen() {
   const progressPercentage = (readsRemaining / maxReads) * 100;
 
   return (
-    <SafeAreaView style={commonStyles.safeArea}>
+    <View style={styles.container}>
       <LinearGradient
         colors={[colors.background, colors.secondary, colors.background]}
         style={styles.gradient}
@@ -273,7 +274,7 @@ export default function HomeScreen() {
       >
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingTop: insets.top + 20 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
@@ -460,11 +461,14 @@ export default function HomeScreen() {
           </Animated.View>
         </ScrollView>
       </LinearGradient>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   gradient: {
     flex: 1,
   },
@@ -473,7 +477,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 20,
     paddingBottom: 100, // Extra padding for tab bar
   },
   header: {
