@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Platform } from 'react-native';
 import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
@@ -14,6 +15,12 @@ export default function TabLayout() {
       label: 'Home',
     },
     {
+      name: 'history',
+      route: '/(tabs)/history',
+      icon: 'clock.fill',
+      label: 'History',
+    },
+    {
       name: 'profile',
       route: '/(tabs)/profile',
       icon: 'person.fill',
@@ -28,6 +35,10 @@ export default function TabLayout() {
         <NativeTabs.Trigger name="(home)">
           <Icon sf="house.fill" drawable="ic_home" />
           <Label>Home</Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="history">
+          <Icon sf="clock.fill" drawable="ic_history" />
+          <Label>History</Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="profile">
           <Icon sf="person.fill" drawable="ic_profile" />
@@ -47,6 +58,7 @@ export default function TabLayout() {
         }}
       >
         <Stack.Screen name="(home)" />
+        <Stack.Screen name="history" />
         <Stack.Screen name="profile" />
       </Stack>
       <FloatingTabBar tabs={tabs} />

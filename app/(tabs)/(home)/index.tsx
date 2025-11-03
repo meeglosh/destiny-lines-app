@@ -160,29 +160,67 @@ export default function HomeScreen() {
       // Simulate a brief delay to mimic real analysis
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Mock reading data
+      // Mock reading data with new template format
       const mockReading = {
-        summary: "Your heart line suggests compassion and creative depth.",
-        heartLine: "Curving upward — empathy and emotional intelligence.",
-        headLine: "Balanced and clear — logic supports intuition.",
-        lifeLine: "Long and steady — resilience and grounded energy.",
-        fateLine: "Subtle arc — self-directed change approaching.",
-        marks: "A small star near the base of the palm shows creative spark.",
-        deeperInsights: "This is a time to trust new instincts and express yourself boldly.",
-        prompts: [
+        lifeLine: "Your life line curves broadly around the base of your thumb and is fairly strong. In palmistry, that suggests good stamina, a strong constitution, and the ability to bounce back from setbacks. You're likely someone who doesn't stay down for long — resilience is your quiet superpower.",
+        headLine: "Your head line runs fairly straight across the palm, not overly curved. This is often read as a sign of clear, practical thinking and a rational approach to life. You weigh decisions carefully, preferring logic over impulse. People probably see you as steady and reliable when it comes to making choices.",
+        heartLine: "Your heart line sits higher and looks straighter than deeply curved. In palmistry, that suggests you're not overly dramatic in love — you value stability, trust, and loyalty. You might not be wildly expressive all the time, but when you commit, you commit deeply.",
+        handShape: "Your hand looks rectangular with longer fingers — this is sometimes called an \"air hand.\" In palmistry, that's tied to curiosity, communication, and creativity. You probably like exploring ideas, connecting dots, and solving problems in inventive ways.",
+        overallReading: "Your palm suggests someone who's resilient, thoughtful, and steady in both practical and emotional life. You balance a curious, creative mind with a strong need for groundedness. Others likely lean on you for clarity and consistency — but you also have a restless streak that keeps you seeking out new ideas and projects.",
+        // Premium content (if applicable)
+        deeperInsights: userTier === 'premium' ? "This is a time to trust new instincts and express yourself boldly. Your palm shows a period of transformation ahead where your natural resilience will be tested but ultimately strengthened." : undefined,
+        prompts: userTier === 'premium' ? [
           "What habits help you feel centered?",
           "Where do you hold back your creativity?",
           "What does stability mean to you right now?"
-        ],
-        practices: [
+        ] : undefined,
+        practices: userTier === 'premium' ? [
           "Take short mindful breaks during the day",
           "Reflect before reacting",
           "Celebrate small wins each evening"
-        ]
+        ] : undefined
       };
 
       console.log('✓ Mock reading generated successfully');
       console.log('  Reading keys:', Object.keys(mockReading));
+
+      // Save reading to database
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const { error: insertError } = await supabase
+          .from('readings')
+          .insert({
+            user_id: user.id,
+            summary: mockReading.overallReading,
+            heart_line: mockReading.heartLine,
+            head_line: mockReading.headLine,
+            life_line: mockReading.lifeLine,
+            fate_line: mockReading.handShape,
+            marks: '',
+            deeper_insights: mockReading.deeperInsights,
+            prompts: mockReading.prompts,
+            practices: mockReading.practices,
+            is_premium: userTier === 'premium',
+          });
+
+        if (insertError) {
+          console.error('Error saving reading:', insertError);
+        } else {
+          console.log('✓ Reading saved to database');
+        }
+
+        // Update usage stats
+        const { error: updateError } = await supabase.rpc('increment_reads_used', {
+          p_user_id: user.id,
+        });
+
+        if (updateError) {
+          console.error('Error updating usage stats:', updateError);
+        }
+      }
 
       // Update local state (simulate usage)
       setReadsRemaining((prev) => Math.max(0, prev - 1));

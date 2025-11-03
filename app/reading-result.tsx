@@ -47,7 +47,7 @@ export default function ReadingResultScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const shareText = `My Palm Reading from Destiny Lines 🔮\n\n${reading.summary}\n\nHeart Line: ${reading.heartLine}\n\nHead Line: ${reading.headLine}\n\nLife Line: ${reading.lifeLine}\n\nFate Line: ${reading.fateLine}`;
+      const shareText = `My Palm Reading from Destiny Lines 🔮\n\n🌿 Life Line\n${reading.lifeLine}\n\n🧠 Head Line\n${reading.headLine}\n\n❤️ Heart Line\n${reading.heartLine}\n\n✋ Shape of the Hand\n${reading.handShape}\n\n🌟 Overall Reading\n${reading.overallReading}`;
       
       await Share.share({
         message: shareText,
@@ -86,75 +86,64 @@ export default function ReadingResultScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          {/* Summary */}
+          {/* Life Line */}
           <Animated.View entering={FadeInUp.duration(600)} style={styles.section}>
             <View style={commonStyles.glassCard}>
               <View style={styles.sectionHeader}>
-                <IconSymbol name="sparkles" size={24} color={colors.primary} />
-                <Text style={styles.sectionTitle}>Summary</Text>
-              </View>
-              <Text style={styles.readingText}>{reading.summary}</Text>
-            </View>
-          </Animated.View>
-
-          {/* Heart Line */}
-          <Animated.View entering={FadeInDown.duration(600).delay(100)} style={styles.section}>
-            <View style={commonStyles.glassCard}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol name="heart.fill" size={24} color="#FF3B30" />
-                <Text style={styles.sectionTitle}>Heart Line</Text>
-              </View>
-              <Text style={styles.readingText}>{reading.heartLine}</Text>
-            </View>
-          </Animated.View>
-
-          {/* Head Line */}
-          <Animated.View entering={FadeInDown.duration(600).delay(200)} style={styles.section}>
-            <View style={commonStyles.glassCard}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol name="brain.head.profile" size={24} color="#5AC8FA" />
-                <Text style={styles.sectionTitle}>Head Line</Text>
-              </View>
-              <Text style={styles.readingText}>{reading.headLine}</Text>
-            </View>
-          </Animated.View>
-
-          {/* Life Line */}
-          <Animated.View entering={FadeInDown.duration(600).delay(300)} style={styles.section}>
-            <View style={commonStyles.glassCard}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol name="leaf.fill" size={24} color="#34C759" />
+                <Text style={styles.emoji}>🌿</Text>
                 <Text style={styles.sectionTitle}>Life Line</Text>
               </View>
               <Text style={styles.readingText}>{reading.lifeLine}</Text>
             </View>
           </Animated.View>
 
-          {/* Fate Line */}
-          <Animated.View entering={FadeInDown.duration(600).delay(400)} style={styles.section}>
+          {/* Head Line */}
+          <Animated.View entering={FadeInDown.duration(600).delay(100)} style={styles.section}>
             <View style={commonStyles.glassCard}>
               <View style={styles.sectionHeader}>
-                <IconSymbol name="star.fill" size={24} color="#FF9500" />
-                <Text style={styles.sectionTitle}>Fate Line</Text>
+                <Text style={styles.emoji}>🧠</Text>
+                <Text style={styles.sectionTitle}>Head Line</Text>
               </View>
-              <Text style={styles.readingText}>{reading.fateLine}</Text>
+              <Text style={styles.readingText}>{reading.headLine}</Text>
             </View>
           </Animated.View>
 
-          {/* Marks */}
-          <Animated.View entering={FadeInDown.duration(600).delay(500)} style={styles.section}>
+          {/* Heart Line */}
+          <Animated.View entering={FadeInDown.duration(600).delay(200)} style={styles.section}>
             <View style={commonStyles.glassCard}>
               <View style={styles.sectionHeader}>
-                <IconSymbol name="circle.grid.cross.fill" size={24} color="#AF52DE" />
-                <Text style={styles.sectionTitle}>Special Marks</Text>
+                <Text style={styles.emoji}>❤️</Text>
+                <Text style={styles.sectionTitle}>Heart Line</Text>
               </View>
-              <Text style={styles.readingText}>{reading.marks}</Text>
+              <Text style={styles.readingText}>{reading.heartLine}</Text>
+            </View>
+          </Animated.View>
+
+          {/* Shape of the Hand */}
+          <Animated.View entering={FadeInDown.duration(600).delay(300)} style={styles.section}>
+            <View style={commonStyles.glassCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.emoji}>✋</Text>
+                <Text style={styles.sectionTitle}>Shape of the Hand</Text>
+              </View>
+              <Text style={styles.readingText}>{reading.handShape}</Text>
+            </View>
+          </Animated.View>
+
+          {/* Overall Reading */}
+          <Animated.View entering={FadeInDown.duration(600).delay(400)} style={styles.section}>
+            <View style={commonStyles.glassCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.emoji}>🌟</Text>
+                <Text style={styles.sectionTitle}>Overall Reading</Text>
+              </View>
+              <Text style={styles.readingText}>{reading.overallReading}</Text>
             </View>
           </Animated.View>
 
           {/* Premium Content */}
           {reading.deeperInsights && (
-            <Animated.View entering={FadeInDown.duration(600).delay(600)} style={styles.section}>
+            <Animated.View entering={FadeInDown.duration(600).delay(500)} style={styles.section}>
               <View style={[commonStyles.glassCard, styles.premiumCard]}>
                 <View style={styles.sectionHeader}>
                   <IconSymbol name="crown.fill" size={24} color={colors.primary} />
@@ -166,7 +155,7 @@ export default function ReadingResultScreen() {
           )}
 
           {reading.prompts && reading.prompts.length > 0 && (
-            <Animated.View entering={FadeInDown.duration(600).delay(700)} style={styles.section}>
+            <Animated.View entering={FadeInDown.duration(600).delay(600)} style={styles.section}>
               <View style={[commonStyles.glassCard, styles.premiumCard]}>
                 <View style={styles.sectionHeader}>
                   <IconSymbol name="lightbulb.fill" size={24} color={colors.primary} />
@@ -183,7 +172,7 @@ export default function ReadingResultScreen() {
           )}
 
           {reading.practices && reading.practices.length > 0 && (
-            <Animated.View entering={FadeInDown.duration(600).delay(800)} style={styles.section}>
+            <Animated.View entering={FadeInDown.duration(600).delay(700)} style={styles.section}>
               <View style={[commonStyles.glassCard, styles.premiumCard]}>
                 <View style={styles.sectionHeader}>
                   <IconSymbol name="figure.mind.and.body" size={24} color={colors.primary} />
@@ -200,14 +189,14 @@ export default function ReadingResultScreen() {
           )}
 
           {/* Disclaimer */}
-          <Animated.View entering={FadeInDown.duration(600).delay(900)} style={styles.section}>
+          <Animated.View entering={FadeInDown.duration(600).delay(800)} style={styles.section}>
             <Text style={[commonStyles.textSecondary, styles.disclaimer]}>
               ⚠️ For entertainment purposes only. Not medical, legal, or financial advice.
             </Text>
           </Animated.View>
 
           {/* Action Buttons */}
-          <Animated.View entering={FadeInDown.duration(600).delay(1000)} style={styles.actions}>
+          <Animated.View entering={FadeInDown.duration(600).delay(900)} style={styles.actions}>
             <TouchableOpacity
               style={[buttonStyles.primary, styles.actionButton]}
               onPress={handleClose}
@@ -270,6 +259,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
     gap: 8,
+  },
+  emoji: {
+    fontSize: 24,
   },
   sectionTitle: {
     fontSize: 20,
