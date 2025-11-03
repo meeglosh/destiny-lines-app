@@ -18,7 +18,6 @@ import { IconSymbol } from '@/components/IconSymbol';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
@@ -150,164 +149,64 @@ export default function HomeScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      console.log('=== Starting Palm Analysis ===');
-      console.log('Image URI:', imageUri);
+      console.log('=== TESTING MODE: Using Mock Palm Reading ===');
+      console.log('Image URI (not used):', imageUri);
       console.log('User Tier:', userTier);
 
-      // Convert image to base64
-      console.log('Converting image to base64...');
-      let base64: string;
+      // ========================================
+      // MOCK ANALYSIS FOR TESTING PURPOSES ONLY
+      // ========================================
       
-      try {
-        // Ensure the URI has the correct format
-        let fileUri = imageUri;
-        if (!fileUri.startsWith('file://')) {
-          fileUri = `file://${fileUri}`;
-        }
+      // Simulate a brief delay to mimic real analysis
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-        console.log('Reading file from:', fileUri);
-
-        // Read the file as base64 using legacy API
-        const base64Data = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
-        if (!base64Data || base64Data.length === 0) {
-          throw new Error('Failed to read image data - empty result');
-        }
-
-        base64 = base64Data;
-        console.log('✓ Image converted to base64 successfully');
-        console.log('  Base64 length:', base64.length);
-        console.log('  First 50 chars:', base64.substring(0, 50));
-      } catch (fileError) {
-        console.error('✗ Error reading file:', fileError);
-        throw new Error(`Failed to read image file: ${fileError instanceof Error ? fileError.message : 'Unknown error'}`);
-      }
-
-      console.log('Preparing request to Edge Function...');
-      const requestBody = {
-        imageBase64: base64,
-        tier: userTier,
+      // Mock reading data
+      const mockReading = {
+        summary: "Your heart line suggests compassion and creative depth.",
+        heartLine: "Curving upward — empathy and emotional intelligence.",
+        headLine: "Balanced and clear — logic supports intuition.",
+        lifeLine: "Long and steady — resilience and grounded energy.",
+        fateLine: "Subtle arc — self-directed change approaching.",
+        marks: "A small star near the base of the palm shows creative spark.",
+        deeperInsights: "This is a time to trust new instincts and express yourself boldly.",
+        prompts: [
+          "What habits help you feel centered?",
+          "Where do you hold back your creativity?",
+          "What does stability mean to you right now?"
+        ],
+        practices: [
+          "Take short mindful breaks during the day",
+          "Reflect before reacting",
+          "Celebrate small wins each evening"
+        ]
       };
-      console.log('Request body structure:', {
-        tier: requestBody.tier,
-        imageBase64Length: requestBody.imageBase64.length,
-      });
 
-      // Call the Supabase Edge Function
-      console.log('Invoking analyze-palm Edge Function...');
-      const startTime = Date.now();
-      
-      const { data, error } = await supabase.functions.invoke('analyze-palm', {
-        body: requestBody,
-      });
+      console.log('✓ Mock reading generated successfully');
+      console.log('  Reading keys:', Object.keys(mockReading));
 
-      const duration = Date.now() - startTime;
-      console.log(`Edge Function response received in ${duration}ms`);
-
-      if (error) {
-        console.error('✗ Edge Function error:', error);
-        console.error('  Error type:', typeof error);
-        console.error('  Error keys:', Object.keys(error));
-        console.error('  Error message:', error.message);
-        console.error('  Error context:', error.context);
-        
-        // Provide more specific error messages
-        let errorMessage = 'Failed to analyze palm';
-        
-        if (error.message) {
-          errorMessage = error.message;
-        }
-        
-        // Check for specific error types
-        if (error.message?.includes('timeout')) {
-          errorMessage = 'Request timed out. Please try again with a smaller image.';
-        } else if (error.message?.includes('network')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        } else if (error.message?.includes('API key')) {
-          errorMessage = 'Service configuration error. Please contact support.';
-        }
-        
-        throw new Error(errorMessage);
-      }
-
-      if (!data) {
-        console.error('✗ No data received from Edge Function');
-        throw new Error('No response from server. Please try again.');
-      }
-
-      console.log('✓ Response data received');
-      console.log('  Response type:', typeof data);
-      console.log('  Response keys:', Object.keys(data));
-      console.log('  Response.ok:', data.ok);
-
-      if (!data.ok) {
-        console.log('⚠ Image validation failed');
-        console.log('  Reason:', data.reason);
-        
-        Alert.alert(
-          'Invalid Image',
-          data.reason || 'Please upload a clear photo of your palm with good lighting.',
-          [{ text: 'OK' }]
-        );
-        setIsAnalyzing(false);
-        return;
-      }
-
-      if (!data.reading) {
-        console.error('✗ No reading in response');
-        console.error('  Full response:', JSON.stringify(data));
-        throw new Error('Invalid response format from server');
-      }
-
-      console.log('✓ Reading received successfully');
-      console.log('  Reading keys:', Object.keys(data.reading));
-      console.log('  Summary length:', data.reading.summary?.length || 0);
-      console.log('  Heart line length:', data.reading.heartLine?.length || 0);
-
-      // Validate reading structure
-      const requiredFields = ['summary', 'heartLine', 'headLine', 'lifeLine', 'fateLine', 'marks'];
-      const missingFields = requiredFields.filter(field => !data.reading[field]);
-      
-      if (missingFields.length > 0) {
-        console.error('✗ Missing required fields:', missingFields);
-        throw new Error('Incomplete reading data received');
-      }
-
-      // Update local state
+      // Update local state (simulate usage)
       setReadsRemaining((prev) => Math.max(0, prev - 1));
 
-      // Navigate to results screen
+      // Navigate to results screen with mock data
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      console.log('Navigating to reading result screen...');
+      console.log('Navigating to reading result screen with mock data...');
       
       router.push({
         pathname: '/reading-result',
         params: {
-          reading: JSON.stringify(data.reading),
+          reading: JSON.stringify(mockReading),
         },
       });
 
-      console.log('=== Palm Analysis Complete ===');
+      console.log('=== Mock Palm Analysis Complete ===');
     } catch (error) {
-      console.error('=== Palm Analysis Failed ===');
+      console.error('=== Mock Analysis Failed ===');
       console.error('Error:', error);
-      console.error('Error type:', error?.constructor?.name);
-      console.error('Error message:', error instanceof Error ? error.message : String(error));
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
-      
-      // Provide user-friendly error message
-      let userMessage = 'An unexpected error occurred. Please try again.';
-      
-      if (error instanceof Error) {
-        userMessage = error.message;
-      }
       
       Alert.alert(
         'Analysis Failed',
-        userMessage,
+        'An unexpected error occurred during mock analysis. Please try again.',
         [
           {
             text: 'Try Again',
@@ -345,6 +244,16 @@ export default function HomeScreen() {
             <Text style={[commonStyles.textSecondary, styles.subtitle]}>
               Discover the secrets in your palm
             </Text>
+          </Animated.View>
+
+          {/* Testing Mode Banner */}
+          <Animated.View entering={FadeInDown.duration(600).delay(100)} style={styles.testingBanner}>
+            <View style={styles.testingBannerContent}>
+              <IconSymbol name="exclamationmark.triangle.fill" size={20} color="#FF9500" />
+              <Text style={styles.testingBannerText}>
+                TESTING MODE: Using mock palm reading data
+              </Text>
+            </View>
           </Animated.View>
 
           {/* Usage Meter */}
@@ -418,7 +327,7 @@ export default function HomeScreen() {
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text style={styles.analyzingText}>Analyzing your palm...</Text>
                   <Text style={[commonStyles.textSecondary, styles.analyzingSubtext]}>
-                    This may take up to 30 seconds
+                    Generating mock reading for testing
                   </Text>
                 </View>
               )}
@@ -541,6 +450,25 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: 'center',
     fontSize: 16,
+  },
+  testingBanner: {
+    marginBottom: 16,
+  },
+  testingBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(255, 149, 0, 0.15)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 149, 0, 0.3)',
+    gap: 8,
+  },
+  testingBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF9500',
   },
   meterSection: {
     marginBottom: 24,
