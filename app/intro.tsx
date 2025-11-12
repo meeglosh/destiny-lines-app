@@ -35,10 +35,10 @@ const carouselSlides = [
     description: 'Our GPT-4 Vision AI analyzes your palm lines with incredible accuracy, revealing insights about your personality, relationships, and life path.',
   },
   {
-    icon: 'lock.shield.fill' as const,
-    title: 'Privacy\nFirst',
-    subtitle: 'Your Data is Safe',
-    description: 'All palm images are automatically deleted within 10 minutes. We never store your photos permanently. Your privacy is our priority.',
+    icon: 'party.popper.fill' as const,
+    title: 'Be the Life\nof the Party',
+    subtitle: 'Share the Magic',
+    description: 'Amaze your friends and family with AI palm readings! Perfect for gatherings, parties, and creating unforgettable moments together.',
   },
   {
     icon: 'chart.line.uptrend.xyaxis' as const,
