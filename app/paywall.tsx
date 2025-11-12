@@ -205,12 +205,11 @@ export default function PaywallScreen() {
                 }
                 style={styles.tierGradient}
               >
-                <View style={styles.popularBadge}>
-                  <Text style={styles.popularText}>MOST POPULAR</Text>
-                </View>
-
                 <View style={styles.tierHeader}>
-                  <View>
+                  <View style={styles.tierHeaderLeft}>
+                    <View style={styles.popularBadge}>
+                      <Text style={styles.popularText}>MOST POPULAR</Text>
+                    </View>
                     <Text style={styles.tierName}>
                       {SUBSCRIPTION_TIERS.premium.name}
                     </Text>
@@ -340,26 +339,28 @@ const styles = StyleSheet.create({
   tierGradient: {
     padding: 24,
   },
+  tierHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  tierHeaderLeft: {
+    flex: 1,
+  },
   popularBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
+    alignSelf: 'flex-start',
     backgroundColor: colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
+    marginBottom: 12,
   },
   popularText: {
     fontSize: 10,
     fontWeight: '800',
     color: colors.background,
     letterSpacing: 1,
-  },
-  tierHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
   },
   tierName: {
     fontSize: 24,
