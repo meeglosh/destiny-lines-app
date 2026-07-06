@@ -2,8 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SUPABASE_URL = 'https://hbozjbhfpxsiazkbdkqr.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhib3pqYmhmcHhzaWF6a2Jka3FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4MzQwMzMsImV4cCI6MjA3NzQxMDAzM30.tcrzVU6j7saMqNlGkvw3RCApSA49HkZ7CHWZpuTWflU';
+const SUPABASE_URL = 'https://zbgjgfvssyfkxnfkpyfd.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpiZ2pnZnZzc3lma3huZmtweWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzNTkxNTQsImV4cCI6MjA5ODkzNTE1NH0.giVR_B4ajPlcst-4S1_cIWmQ2iZqdUsC-XIL7xbUTX0';
 
 if (!SUPABASE_URL) {
   throw new Error('Missing Supabase URL');

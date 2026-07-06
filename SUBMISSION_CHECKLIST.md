@@ -11,18 +11,22 @@ Work through them in order.
       (`ios.bundleIdentifier` and `android.package`) before your first build.
       The bundle ID can never change after the app ships.
 
-## 2. Supabase backend (project `hbozjbhfpxsiazkbdkqr`)
+## 2. Supabase backend (project `zbgjgfvssyfkxnfkpyfd` — "Destiny Lines AI")
 
-- [ ] Apply the migration `supabase/migrations/20260706000000_init_destiny_lines.sql`
-      (`supabase db push`, or paste into the dashboard SQL editor).
-      ⚠️ If old ad-hoc versions of `readings` / `usage_stats` / `subscriptions` / `users`
-      exist from earlier prototyping, drop them first — there are no real users yet.
-      The old `users` table is no longer used by the app at all.
-- [ ] Deploy the edge functions:
-      `supabase functions deploy analyze-palm delete-account sync-subscription`
-- [ ] Set function secrets:
-      - `OPENAI_API_KEY` (probably already set)
+The app points at the fresh project you created on 2026-07-06. The original
+builder-era project is renamed "Destiny Lines AI (OLD)" and can be deleted.
+
+- [x] Migration applied (`supabase db push`, 2026-07-06)
+- [x] Edge functions deployed: analyze-palm, delete-account, sync-subscription
+- [ ] Set function secrets (Dashboard → Edge Functions → Secrets, or
+      `supabase secrets set KEY=value`):
+      - `OPENAI_API_KEY` — your own OpenAI API key (platform.openai.com).
+        Readings fail with "Service configuration error" until this is set.
       - `REVENUECAT_SECRET_KEY` (from RevenueCat, step 3)
+- [ ] Delete the two obsolete projects to avoid confusion:
+      "Destiny Lines AI (OLD)" (hbozjbhfpxsiazkbdkqr) and the CLI-created
+      "destiny-lines" (loqgjjhhqivkoligpzyz) under your other Supabase account
+      (also delete ~/.destiny-lines-db-password once that project is gone).
 - [ ] Auth settings: decide whether "Confirm email" is on. The app handles both,
       but leaving it ON means Apple's reviewer must verify an email — for review,
       easier to turn it OFF or provide a pre-verified demo account (step 5).
