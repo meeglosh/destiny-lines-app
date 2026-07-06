@@ -15,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { configurePurchases } from '@/lib/purchases';
+import { FREE_READINGS } from '@/utils/constants';
 import { colors, commonStyles, buttonStyles } from '@/styles/commonStyles';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -40,36 +42,33 @@ export default function AuthScreen() {
 
         if (error) throw error;
 
-        if (data.user) {
-          // Create user record in database
-          const { error: dbError } = await supabase
-            .from('users')
-            .insert({
-              id: data.user.id,
-              email: data.user.email,
-              tier: null,
-              readsUsed: 0,
-            });
-
-          if (dbError) {
-            console.error('Error creating user record:', dbError);
-          }
-
+        if (data.session) {
+          await configurePurchases(data.session.user.id);
           Alert.alert(
-            'Success',
-            'Account created! Please check your email to verify your account.',
-            [{ text: 'OK', onPress: () => router.push('/paywall') }]
+            'Welcome!',
+            `Your account is ready. You have ${FREE_READINGS} free readings to get started.`,
+            [{ text: 'Start Reading', onPress: () => router.replace('/(tabs)/(home)/') }]
+          );
+        } else {
+          // Email confirmation is enabled on the project
+          Alert.alert(
+            'Check Your Email',
+            'Account created! Please verify your email, then sign in.',
+            [{ text: 'OK', onPress: () => setIsSignUp(false) }]
           );
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
         if (error) throw error;
 
-        router.push('/paywall');
+        if (data.session) {
+          await configurePurchases(data.session.user.id);
+        }
+        router.replace('/(tabs)/(home)/');
       }
     } catch (error: any) {
       Alert.alert('Error', error.message);

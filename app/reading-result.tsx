@@ -47,7 +47,7 @@ export default function ReadingResultScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const shareText = `My Palm Reading from Destiny Lines 🔮\n\n🌿 Life Line\n${reading.lifeLine}\n\n🧠 Head Line\n${reading.headLine}\n\n❤️ Heart Line\n${reading.heartLine}\n\n✋ Shape of the Hand\n${reading.handShape}\n\n🌟 Overall Reading\n${reading.overallReading}`;
+      const shareText = `My Palm Reading from Destiny Lines 🔮\n\n🌿 Life Line\n${reading.lifeLine}\n\n🧠 Head Line\n${reading.headLine}\n\n❤️ Heart Line\n${reading.heartLine}\n\n✨ Fate Line\n${reading.fateLine}\n\n🌟 Overall Reading\n${reading.summary}`;
       
       await Share.share({
         message: shareText,
@@ -119,16 +119,29 @@ export default function ReadingResultScreen() {
             </View>
           </Animated.View>
 
-          {/* Shape of the Hand */}
+          {/* Fate Line */}
           <Animated.View entering={FadeInDown.duration(600).delay(300)} style={styles.section}>
             <View style={commonStyles.glassCard}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.emoji}>✋</Text>
-                <Text style={styles.sectionTitle}>Shape of the Hand</Text>
+                <Text style={styles.emoji}>✨</Text>
+                <Text style={styles.sectionTitle}>Fate Line</Text>
               </View>
-              <Text style={styles.readingText}>{reading.handShape}</Text>
+              <Text style={styles.readingText}>{reading.fateLine}</Text>
             </View>
           </Animated.View>
+
+          {/* Special Marks */}
+          {!!reading.marks && (
+            <Animated.View entering={FadeInDown.duration(600).delay(350)} style={styles.section}>
+              <View style={commonStyles.glassCard}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.emoji}>✋</Text>
+                  <Text style={styles.sectionTitle}>Special Marks</Text>
+                </View>
+                <Text style={styles.readingText}>{reading.marks}</Text>
+              </View>
+            </Animated.View>
+          )}
 
           {/* Overall Reading */}
           <Animated.View entering={FadeInDown.duration(600).delay(400)} style={styles.section}>
@@ -137,7 +150,7 @@ export default function ReadingResultScreen() {
                 <Text style={styles.emoji}>🌟</Text>
                 <Text style={styles.sectionTitle}>Overall Reading</Text>
               </View>
-              <Text style={styles.readingText}>{reading.overallReading}</Text>
+              <Text style={styles.readingText}>{reading.summary}</Text>
             </View>
           </Animated.View>
 

@@ -1,46 +1,57 @@
 {
   "expo": {
-    "name": "Natively",
-    "slug": "Natively",
+    "name": "Destiny Lines",
+    "slug": "destiny-lines",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/natively-dark.png",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/natively-dark.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#120D2B"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.Natively",
+      "bundleIdentifier": "com.destinylines.app",
+      "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/natively-dark.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#120D2B"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Natively"
+      "package": "com.destinylines.app",
+      "versionCode": 1
     },
     "web": {
-      "favicon": "./assets/images/final_quest_240x240.png",
+      "favicon": "./assets/images/icon.png",
       "bundler": "metro"
     },
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Destiny Lines uses the camera to take a photo of your palm for your palm reading. Photos are analyzed and never stored.",
+          "photosPermission": "Destiny Lines accesses your photo library so you can choose a palm photo for your reading. Photos are analyzed and never stored."
+        }
+      ]
     ],
-    "scheme": "natively",
+    "scheme": "destinylines",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
+      "revenueCatIosApiKey": "REVENUECAT_IOS_API_KEY_PLACEHOLDER",
+      "revenueCatAndroidApiKey": "REVENUECAT_ANDROID_API_KEY_PLACEHOLDER",
       "router": {}
     }
   }

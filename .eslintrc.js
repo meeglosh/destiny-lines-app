@@ -30,7 +30,10 @@ module.exports = {
     "@typescript-eslint/no-empty-object-type": "off",
     "@typescript-eslint/no-wrapper-object-types": "off",
     "react/no-unescaped-entities": "off",
-    "import/no-unresolved": "error",
+    // Module resolution is validated by tsc; the import plugin's TS resolver
+    // is incompatible with this eslint version and reports false positives.
+    "import/no-unresolved": "off",
+    "import/namespace": "off",
     "prefer-const": "off",
     "react/prop-types": 1,
     "no-case-declarations": "off",

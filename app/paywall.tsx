@@ -1,68 +1,156 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import Purchases, { PurchasesPackage } from 'react-native-purchases';
 import { colors, commonStyles, buttonStyles } from '@/styles/commonStyles';
-import { SUBSCRIPTION_TIERS } from '@/utils/constants';
+import { SUBSCRIPTION_TIERS, LEGAL_URLS } from '@/utils/constants';
+import {
+  configurePurchases,
+  isPurchasesConfigured,
+  syncSubscriptionToSupabase,
+  tierFromCustomerInfo,
+} from '@/lib/purchases';
+import { supabase } from '@/lib/supabase';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
 
-const { width } = Dimensions.get('window');
+type TierKey = 'standard' | 'premium';
 
 export default function PaywallScreen() {
-  const [selectedTier, setSelectedTier] = useState<'standard' | 'premium'>('premium');
+  const [selectedTier, setSelectedTier] = useState<TierKey>('premium');
+  const [packages, setPackages] = useState<Partial<Record<TierKey, PurchasesPackage>>>({});
+  const [billingReady, setBillingReady] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleSubscribe = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(
-      'Coming Soon',
-      `You selected the ${SUBSCRIPTION_TIERS[selectedTier].name} plan. In-app purchases will be integrated soon!`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            console.log('User acknowledged subscription coming soon');
-          },
-        },
-      ]
-    );
-  };
+  useEffect(() => {
+    loadOfferings();
+  }, []);
 
-  const handleRestore = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert('Restore Purchases', 'This feature will be available once IAP is integrated.');
-  };
-
-  const handleTestingMode = () => {
-    console.log('Entering testing mode - navigating to main app');
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
-    // Navigate directly to the main app experience (tabs/home)
-    // Using replace to prevent going back to paywall
+  const loadOfferings = async () => {
     try {
-      router.replace('/(tabs)/(home)/');
-      console.log('Navigation to /(tabs)/(home)/ initiated');
-    } catch (error) {
-      console.error('Navigation error:', error);
-      // Fallback navigation attempts
-      try {
-        router.push('/(tabs)/(home)/');
-        console.log('Fallback navigation with push initiated');
-      } catch (fallbackError) {
-        console.error('Fallback navigation error:', fallbackError);
-        Alert.alert('Navigation Error', 'Unable to navigate to home screen. Please restart the app.');
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const ready = await configurePurchases(session?.user.id);
+      if (!ready) {
+        setBillingReady(false);
+        return;
       }
+
+      const offerings = await Purchases.getOfferings();
+      const available = offerings.current?.availablePackages ?? [];
+
+      const found: Partial<Record<TierKey, PurchasesPackage>> = {};
+      for (const pkg of available) {
+        const id = `${pkg.identifier} ${pkg.product.identifier}`.toLowerCase();
+        if (id.includes('premium')) found.premium = pkg;
+        else if (id.includes('standard')) found.standard = pkg;
+      }
+      setPackages(found);
+      setBillingReady(!!found.standard || !!found.premium);
+    } catch (error) {
+      console.error('Failed to load offerings:', error);
+      setBillingReady(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const priceFor = (tier: TierKey) =>
+    packages[tier]?.product.priceString
+      ? `${packages[tier]!.product.priceString}/mo`
+      : SUBSCRIPTION_TIERS[tier].price;
+
+  const handleSubscribe = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const pkg = packages[selectedTier];
+    if (!billingReady || !pkg) {
+      Alert.alert(
+        'Purchases Unavailable',
+        'In-app purchases are not available in this build. Please try again from the App Store version of the app.'
+      );
+      return;
+    }
+
+    setIsPurchasing(true);
+    try {
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      await syncSubscriptionToSupabase();
+
+      const tier = tierFromCustomerInfo(customerInfo);
+      if (tier !== 'free') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          'Welcome Aboard! 🔮',
+          `Your ${SUBSCRIPTION_TIERS[tier as TierKey].name} subscription is active.`,
+          [{ text: 'Start Reading', onPress: () => router.back() }]
+        );
+      }
+    } catch (error: any) {
+      if (!error.userCancelled) {
+        console.error('Purchase failed:', error);
+        Alert.alert('Purchase Failed', error.message ?? 'Please try again.');
+      }
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (!isPurchasesConfigured()) {
+      Alert.alert(
+        'Purchases Unavailable',
+        'In-app purchases are not available in this build.'
+      );
+      return;
+    }
+
+    setIsPurchasing(true);
+    try {
+      const customerInfo = await Purchases.restorePurchases();
+      await syncSubscriptionToSupabase();
+
+      const tier = tierFromCustomerInfo(customerInfo);
+      if (tier !== 'free') {
+        Alert.alert(
+          'Purchases Restored',
+          `Your ${SUBSCRIPTION_TIERS[tier as TierKey].name} subscription has been restored.`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      } else {
+        Alert.alert('No Purchases Found', 'There are no previous purchases to restore.');
+      }
+    } catch (error: any) {
+      console.error('Restore failed:', error);
+      Alert.alert('Restore Failed', error.message ?? 'Please try again.');
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  const handleClose = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/(home)/');
     }
   };
 
@@ -79,6 +167,13 @@ export default function PaywallScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
+          {/* Close */}
+          <View style={styles.closeRow}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <IconSymbol name="xmark" size={20} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
           {/* Header */}
           <Animated.View entering={FadeInUp.duration(600)} style={styles.header}>
             <Text style={[commonStyles.title, styles.title]}>
@@ -102,7 +197,7 @@ export default function PaywallScreen() {
                 <View style={styles.valueText}>
                   <Text style={styles.valueTitle}>AI-Powered Analysis</Text>
                   <Text style={commonStyles.textSecondary}>
-                    Advanced palm reading using GPT-4 Vision
+                    Advanced palm reading powered by AI vision
                   </Text>
                 </View>
               </View>
@@ -114,7 +209,7 @@ export default function PaywallScreen() {
                 <View style={styles.valueText}>
                   <Text style={styles.valueTitle}>Privacy First</Text>
                   <Text style={commonStyles.textSecondary}>
-                    Images deleted within 10 minutes
+                    Palm photos are analyzed and never stored
                   </Text>
                 </View>
               </View>
@@ -138,102 +233,57 @@ export default function PaywallScreen() {
             entering={FadeInDown.duration(600).delay(400)}
             style={styles.tiersSection}
           >
-            {/* Standard Tier */}
-            <TouchableOpacity
-              style={[
-                styles.tierCard,
-                selectedTier === 'standard' && styles.tierCardSelected,
-              ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSelectedTier('standard');
-              }}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={
-                  selectedTier === 'standard'
-                    ? ['rgba(178, 255, 89, 0.2)', 'rgba(178, 255, 89, 0.05)']
-                    : ['rgba(30, 26, 54, 0.8)', 'rgba(30, 26, 54, 0.8)']
-                }
-                style={styles.tierGradient}
+            {(['standard', 'premium'] as TierKey[]).map((tier) => (
+              <TouchableOpacity
+                key={tier}
+                style={[
+                  styles.tierCard,
+                  selectedTier === tier && styles.tierCardSelected,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedTier(tier);
+                }}
+                activeOpacity={0.8}
               >
-                <View style={styles.tierHeader}>
-                  <View>
-                    <Text style={styles.tierName}>
-                      {SUBSCRIPTION_TIERS.standard.name}
-                    </Text>
-                    <Text style={styles.tierPrice}>
-                      {SUBSCRIPTION_TIERS.standard.price}
-                    </Text>
+                <LinearGradient
+                  colors={
+                    selectedTier === tier
+                      ? ['rgba(178, 255, 89, 0.2)', 'rgba(178, 255, 89, 0.05)']
+                      : ['rgba(30, 26, 54, 0.8)', 'rgba(30, 26, 54, 0.8)']
+                  }
+                  style={styles.tierGradient}
+                >
+                  <View style={styles.tierHeader}>
+                    <View style={styles.tierHeaderLeft}>
+                      {tier === 'premium' && (
+                        <View style={styles.popularBadge}>
+                          <Text style={styles.popularText}>MOST POPULAR</Text>
+                        </View>
+                      )}
+                      <Text style={styles.tierName}>
+                        {SUBSCRIPTION_TIERS[tier].name}
+                      </Text>
+                      <Text style={styles.tierPrice}>{priceFor(tier)}</Text>
+                    </View>
+                    {selectedTier === tier && (
+                      <View style={styles.selectedBadge}>
+                        <IconSymbol name="checkmark.circle.fill" size={24} color={colors.primary} />
+                      </View>
+                    )}
                   </View>
-                  {selectedTier === 'standard' && (
-                    <View style={styles.selectedBadge}>
-                      <IconSymbol name="checkmark.circle.fill" size={24} color={colors.primary} />
-                    </View>
-                  )}
-                </View>
 
-                <View style={styles.tierFeatures}>
-                  {SUBSCRIPTION_TIERS.standard.features.map((feature, index) => (
-                    <View key={index} style={styles.featureRow}>
-                      <IconSymbol name="checkmark" size={16} color={colors.primary} />
-                      <Text style={styles.featureText}>{feature}</Text>
-                    </View>
-                  ))}
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            {/* Premium Tier */}
-            <TouchableOpacity
-              style={[
-                styles.tierCard,
-                selectedTier === 'premium' && styles.tierCardSelected,
-              ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSelectedTier('premium');
-              }}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={
-                  selectedTier === 'premium'
-                    ? ['rgba(178, 255, 89, 0.2)', 'rgba(178, 255, 89, 0.05)']
-                    : ['rgba(30, 26, 54, 0.8)', 'rgba(30, 26, 54, 0.8)']
-                }
-                style={styles.tierGradient}
-              >
-                <View style={styles.tierHeader}>
-                  <View style={styles.tierHeaderLeft}>
-                    <View style={styles.popularBadge}>
-                      <Text style={styles.popularText}>MOST POPULAR</Text>
-                    </View>
-                    <Text style={styles.tierName}>
-                      {SUBSCRIPTION_TIERS.premium.name}
-                    </Text>
-                    <Text style={styles.tierPrice}>
-                      {SUBSCRIPTION_TIERS.premium.price}
-                    </Text>
+                  <View style={styles.tierFeatures}>
+                    {SUBSCRIPTION_TIERS[tier].features.map((feature, index) => (
+                      <View key={index} style={styles.featureRow}>
+                        <IconSymbol name="checkmark" size={16} color={colors.primary} />
+                        <Text style={styles.featureText}>{feature}</Text>
+                      </View>
+                    ))}
                   </View>
-                  {selectedTier === 'premium' && (
-                    <View style={styles.selectedBadge}>
-                      <IconSymbol name="checkmark.circle.fill" size={24} color={colors.primary} />
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.tierFeatures}>
-                  {SUBSCRIPTION_TIERS.premium.features.map((feature, index) => (
-                    <View key={index} style={styles.featureRow}>
-                      <IconSymbol name="checkmark" size={16} color={colors.primary} />
-                      <Text style={styles.featureText}>{feature}</Text>
-                    </View>
-                  ))}
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                </LinearGradient>
+              </TouchableOpacity>
+            ))}
           </Animated.View>
 
           {/* Subscribe Button */}
@@ -244,25 +294,40 @@ export default function PaywallScreen() {
             <TouchableOpacity
               style={[buttonStyles.primary, styles.subscribeButton]}
               onPress={handleSubscribe}
+              disabled={isPurchasing || isLoading}
             >
-              <Text style={buttonStyles.text}>
-                Subscribe to {SUBSCRIPTION_TIERS[selectedTier].name}
-              </Text>
+              {isPurchasing || isLoading ? (
+                <ActivityIndicator color={colors.background} />
+              ) : (
+                <Text style={buttonStyles.text}>
+                  Subscribe to {SUBSCRIPTION_TIERS[selectedTier].name}
+                </Text>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.restoreButton} onPress={handleRestore}>
+            <TouchableOpacity
+              style={styles.restoreButton}
+              onPress={handleRestore}
+              disabled={isPurchasing}
+            >
               <Text style={styles.restoreText}>Restore Purchases</Text>
             </TouchableOpacity>
 
-            {/* Testing Mode Button */}
-            <TouchableOpacity style={styles.testingButton} onPress={handleTestingMode}>
-              <Text style={styles.testingText}>🧪 Enter Testing Mode</Text>
-            </TouchableOpacity>
-
             <Text style={[commonStyles.textSecondary, styles.disclaimer]}>
-              Entertainment purposes only. Not medical, legal, or financial advice.
-              Auto-renews unless cancelled. Ages 16+.
+              Subscriptions renew monthly and are billed to your App Store account.
+              Cancel anytime in your App Store settings. Entertainment purposes only.
+              Not medical, legal, or financial advice. Ages 16+.
             </Text>
+
+            <View style={styles.legalLinks}>
+              <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync(LEGAL_URLS.terms)}>
+                <Text style={styles.legalLinkText}>Terms of Use</Text>
+              </TouchableOpacity>
+              <Text style={styles.legalSeparator}>•</Text>
+              <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync(LEGAL_URLS.privacy)}>
+                <Text style={styles.legalLinkText}>Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
         </ScrollView>
       </LinearGradient>
@@ -279,8 +344,21 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 8,
     paddingBottom: 40,
+  },
+  closeRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 4,
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(178, 255, 89, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     marginBottom: 32,
@@ -406,23 +484,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  testingButton: {
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: 'rgba(178, 255, 89, 0.1)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(178, 255, 89, 0.3)',
-  },
-  testingText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
   disclaimer: {
     textAlign: 'center',
     fontSize: 12,
     lineHeight: 18,
     marginTop: 8,
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  legalLinkText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    color: colors.textSecondary,
+    fontSize: 13,
   },
 });

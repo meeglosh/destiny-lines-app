@@ -1,109 +1,71 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { colors, commonStyles, buttonStyles } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
-
-const { width } = Dimensions.get('window');
+import { analyzePalm, fetchReadingQuota, ReadingQuota } from '@/lib/palmReading';
+import { FREE_READINGS } from '@/utils/constants';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const [readsRemaining, setReadsRemaining] = useState(20);
-  const [maxReads] = useState(20);
+  const [quota, setQuota] = useState<ReadingQuota | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [userTier, setUserTier] = useState<'standard' | 'premium'>('standard');
 
-  useEffect(() => {
-    loadUsageStats();
+  const loadQuota = useCallback(async () => {
+    const result = await fetchReadingQuota();
+    if (result) setQuota(result);
   }, []);
 
-  const loadUsageStats = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+  // Refresh whenever the tab regains focus (e.g. after subscribing on the paywall)
+  useFocusEffect(
+    useCallback(() => {
+      loadQuota();
+    }, [loadQuota])
+  );
 
-      if (!user) {
-        console.log('No user logged in - using default values for testing');
-        return;
-      }
+  const readsRemaining = quota?.remaining ?? FREE_READINGS;
+  const maxReads = quota?.readsLimit ?? FREE_READINGS;
+  const isFreeTier = (quota?.tier ?? 'free') === 'free';
 
-      // Get usage stats
-      const { data: usageData, error: usageError } = await supabase
-        .from('usage_stats')
-        .select('reads_used, reads_limit')
-        .eq('user_id', user.id)
-        .single();
-
-      if (usageError) {
-        console.error('Error loading usage stats:', usageError);
-        return;
-      }
-
-      if (usageData) {
-        const remaining = usageData.reads_limit - usageData.reads_used;
-        setReadsRemaining(Math.max(0, remaining));
-      }
-
-      // Get subscription tier
-      const { data: subData } = await supabase
-        .from('subscriptions')
-        .select('tier')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .single();
-
-      if (subData?.tier) {
-        setUserTier(subData.tier as 'standard' | 'premium');
-      }
-    } catch (error) {
-      console.error('Error in loadUsageStats:', error);
-    }
+  const pickerOptions: ImagePicker.ImagePickerOptions = {
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.7,
+    base64: true,
   };
 
   const handleCapturePhoto = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      // Request camera permissions
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-
       if (status !== 'granted') {
         Alert.alert(
           'Camera Permission Required',
-          'Please grant camera access to capture your palm photo.',
+          'Please grant camera access in Settings to capture your palm photo.',
           [{ text: 'OK' }]
         );
         return;
       }
 
-      // Launch camera
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        console.log('Photo captured:', result.assets[0].uri);
-        handleAnalyzePalm(result.assets[0].uri);
+      const result = await ImagePicker.launchCameraAsync(pickerOptions);
+      if (!result.canceled && result.assets[0]?.base64) {
+        handleAnalyzePalm(result.assets[0].base64);
       }
     } catch (error) {
       console.error('Error capturing photo:', error);
@@ -115,29 +77,19 @@ export default function HomeScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      // Request media library permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
       if (status !== 'granted') {
         Alert.alert(
           'Photo Library Permission Required',
-          'Please grant photo library access to upload your palm photo.',
+          'Please grant photo library access in Settings to upload your palm photo.',
           [{ text: 'OK' }]
         );
         return;
       }
 
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        console.log('Photo selected:', result.assets[0].uri);
-        handleAnalyzePalm(result.assets[0].uri);
+      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
+      if (!result.canceled && result.assets[0]?.base64) {
+        handleAnalyzePalm(result.assets[0].base64);
       }
     } catch (error) {
       console.error('Error selecting photo:', error);
@@ -145,124 +97,57 @@ export default function HomeScreen() {
     }
   };
 
-  const handleAnalyzePalm = async (imageUri: string) => {
+  const handleAnalyzePalm = async (imageBase64: string) => {
     setIsAnalyzing(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      console.log('=== TESTING MODE: Using Mock Palm Reading ===');
-      console.log('Image URI (not used):', imageUri);
-      console.log('User Tier:', userTier);
+      const result = await analyzePalm(imageBase64);
 
-      // ========================================
-      // MOCK ANALYSIS FOR TESTING PURPOSES ONLY
-      // ========================================
-      
-      // Simulate a brief delay to mimic real analysis
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Mock reading data with new template format
-      const mockReading = {
-        lifeLine: "Your life line curves broadly around the base of your thumb and is fairly strong. In palmistry, that suggests good stamina, a strong constitution, and the ability to bounce back from setbacks. You're likely someone who doesn't stay down for long — resilience is your quiet superpower.",
-        headLine: "Your head line runs fairly straight across the palm, not overly curved. This is often read as a sign of clear, practical thinking and a rational approach to life. You weigh decisions carefully, preferring logic over impulse. People probably see you as steady and reliable when it comes to making choices.",
-        heartLine: "Your heart line sits higher and looks straighter than deeply curved. In palmistry, that suggests you're not overly dramatic in love — you value stability, trust, and loyalty. You might not be wildly expressive all the time, but when you commit, you commit deeply.",
-        handShape: "Your hand looks rectangular with longer fingers — this is sometimes called an \"air hand.\" In palmistry, that's tied to curiosity, communication, and creativity. You probably like exploring ideas, connecting dots, and solving problems in inventive ways.",
-        overallReading: "Your palm suggests someone who's resilient, thoughtful, and steady in both practical and emotional life. You balance a curious, creative mind with a strong need for groundedness. Others likely lean on you for clarity and consistency — but you also have a restless streak that keeps you seeking out new ideas and projects.",
-        // Premium content (if applicable)
-        deeperInsights: userTier === 'premium' ? "This is a time to trust new instincts and express yourself boldly. Your palm shows a period of transformation ahead where your natural resilience will be tested but ultimately strengthened." : undefined,
-        prompts: userTier === 'premium' ? [
-          "What habits help you feel centered?",
-          "Where do you hold back your creativity?",
-          "What does stability mean to you right now?"
-        ] : undefined,
-        practices: userTier === 'premium' ? [
-          "Take short mindful breaks during the day",
-          "Reflect before reacting",
-          "Celebrate small wins each evening"
-        ] : undefined
-      };
-
-      console.log('✓ Mock reading generated successfully');
-      console.log('  Reading keys:', Object.keys(mockReading));
-
-      // Save reading to database
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        const { error: insertError } = await supabase
-          .from('readings')
-          .insert({
-            user_id: user.id,
-            summary: mockReading.overallReading,
-            heart_line: mockReading.heartLine,
-            head_line: mockReading.headLine,
-            life_line: mockReading.lifeLine,
-            fate_line: mockReading.handShape,
-            marks: '',
-            deeper_insights: mockReading.deeperInsights,
-            prompts: mockReading.prompts,
-            practices: mockReading.practices,
-            is_premium: userTier === 'premium',
-          });
-
-        if (insertError) {
-          console.error('Error saving reading:', insertError);
+      if (!result.ok || !result.reading) {
+        if (result.code === 'limit_reached') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          Alert.alert(
+            'No Readings Left',
+            result.reason ?? 'You have used all your readings.',
+            [
+              { text: 'Not Now', style: 'cancel' },
+              { text: 'See Plans', onPress: () => router.push('/paywall') },
+            ]
+          );
+        } else if (result.code === 'not_a_palm') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          Alert.alert(
+            'Palm Not Detected',
+            result.reason ??
+              'We could not detect a palm in that photo. Try a clear, well-lit photo of your open palm.'
+          );
         } else {
-          console.log('✓ Reading saved to database');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          Alert.alert(
+            'Analysis Failed',
+            result.reason ?? 'Something went wrong. Please try again.'
+          );
         }
-
-        // Update usage stats
-        const { error: updateError } = await supabase.rpc('increment_reads_used', {
-          p_user_id: user.id,
-        });
-
-        if (updateError) {
-          console.error('Error updating usage stats:', updateError);
-        }
+        return;
       }
 
-      // Update local state (simulate usage)
-      setReadsRemaining((prev) => Math.max(0, prev - 1));
+      if (typeof result.remaining === 'number' && quota) {
+        setQuota({ ...quota, remaining: result.remaining });
+      } else {
+        loadQuota();
+      }
 
-      // Navigate to results screen with mock data
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
-      console.log('Navigating to reading result screen with mock data...');
-      
       router.push({
         pathname: '/reading-result',
-        params: {
-          reading: JSON.stringify(mockReading),
-        },
+        params: { reading: JSON.stringify(result.reading) },
       });
-
-      console.log('=== Mock Palm Analysis Complete ===');
-    } catch (error) {
-      console.error('=== Mock Analysis Failed ===');
-      console.error('Error:', error);
-      
-      Alert.alert(
-        'Analysis Failed',
-        'An unexpected error occurred during mock analysis. Please try again.',
-        [
-          {
-            text: 'Try Again',
-            onPress: () => console.log('User will retry'),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const progressPercentage = (readsRemaining / maxReads) * 100;
+  const progressPercentage = maxReads > 0 ? (readsRemaining / maxReads) * 100 : 0;
 
   return (
     <View style={styles.container}>
@@ -285,16 +170,6 @@ export default function HomeScreen() {
             </Text>
           </Animated.View>
 
-          {/* Testing Mode Banner */}
-          <Animated.View entering={FadeInDown.duration(600).delay(100)} style={styles.testingBanner}>
-            <View style={styles.testingBannerContent}>
-              <IconSymbol name="exclamationmark.triangle.fill" size={20} color="#FF9500" />
-              <Text style={styles.testingBannerText}>
-                TESTING MODE: Using mock palm reading data
-              </Text>
-            </View>
-          </Animated.View>
-
           {/* Usage Meter */}
           <Animated.View
             entering={FadeInDown.duration(600).delay(200)}
@@ -302,7 +177,9 @@ export default function HomeScreen() {
           >
             <View style={commonStyles.glassCard}>
               <View style={styles.meterHeader}>
-                <Text style={styles.meterTitle}>Readings Remaining</Text>
+                <Text style={styles.meterTitle}>
+                  {isFreeTier ? 'Free Readings' : 'Readings This Month'}
+                </Text>
                 <Text style={styles.meterCount}>
                   {readsRemaining} / {maxReads}
                 </Text>
@@ -334,13 +211,19 @@ export default function HomeScreen() {
                 />
               </View>
 
-              {readsRemaining <= 5 && (
-                <View style={styles.warningContainer}>
+              {readsRemaining <= 2 && readsRemaining > 0 && (
+                <TouchableOpacity
+                  style={styles.warningContainer}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push('/paywall');
+                  }}
+                >
                   <IconSymbol name="exclamationmark.triangle.fill" size={16} color="#FF9500" />
                   <Text style={styles.warningText}>
-                    Running low on readings! Upgrade for more.
+                    Running low on readings! Tap to see plans.
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
             </View>
           </Animated.View>
@@ -366,7 +249,7 @@ export default function HomeScreen() {
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text style={styles.analyzingText}>Analyzing your palm...</Text>
                   <Text style={[commonStyles.textSecondary, styles.analyzingSubtext]}>
-                    Generating mock reading for testing
+                    Reading the lines of your destiny
                   </Text>
                 </View>
               )}
@@ -397,7 +280,9 @@ export default function HomeScreen() {
               {readsRemaining === 0 && !isAnalyzing && (
                 <View style={styles.noReadsContainer}>
                   <Text style={styles.noReadsText}>
-                    You&apos;ve used all your readings for this period.
+                    {isFreeTier
+                      ? "You've used all your free readings."
+                      : "You've used all your readings for this month."}
                   </Text>
                   <TouchableOpacity
                     style={styles.upgradeLink}
@@ -406,7 +291,9 @@ export default function HomeScreen() {
                       router.push('/paywall');
                     }}
                   >
-                    <Text style={styles.upgradeLinkText}>Upgrade Plan →</Text>
+                    <Text style={styles.upgradeLinkText}>
+                      {isFreeTier ? 'Subscribe for More →' : 'Upgrade Plan →'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -457,6 +344,7 @@ export default function HomeScreen() {
           >
             <Text style={[commonStyles.textSecondary, styles.disclaimer]}>
               ⚠️ For entertainment purposes only. Not medical, legal, or financial advice.
+              Palm photos are analyzed and never stored.
             </Text>
           </Animated.View>
         </ScrollView>
@@ -491,25 +379,6 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: 'center',
     fontSize: 16,
-  },
-  testingBanner: {
-    marginBottom: 16,
-  },
-  testingBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    backgroundColor: 'rgba(255, 149, 0, 0.15)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 149, 0, 0.3)',
-    gap: 8,
-  },
-  testingBannerText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FF9500',
   },
   meterSection: {
     marginBottom: 24,

@@ -12,8 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { colors, commonStyles, buttonStyles } from '@/styles/commonStyles';
-import { DISCLAIMER_TEXT, TOS_TEXT } from '@/utils/constants';
+import { DISCLAIMER_TEXT, TOS_TEXT, LEGAL_URLS } from '@/utils/constants';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import * as WebBrowser from 'expo-web-browser';
 
 const { width } = Dimensions.get('window');
 
@@ -101,6 +102,14 @@ export default function OnboardingScreen() {
                 </View>
                 <Text style={commonStyles.text}>I agree to the Terms of Service</Text>
               </TouchableOpacity>
+              <View style={styles.legalLinks}>
+                <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync(LEGAL_URLS.terms)}>
+                  <Text style={styles.legalLinkText}>Read Terms of Service</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync(LEGAL_URLS.privacy)}>
+                  <Text style={styles.legalLinkText}>Read Privacy Policy</Text>
+                </TouchableOpacity>
+              </View>
             </Animated.View>
           )}
 
@@ -207,6 +216,18 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    paddingBottom: 8,
+  },
+  legalLinkText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   footer: {
     gap: 20,

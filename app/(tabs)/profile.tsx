@@ -7,21 +7,24 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { colors, commonStyles, buttonStyles } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTier } from '@/lib/purchases';
+import { LEGAL_URLS, SUPPORT_EMAIL } from '@/utils/constants';
 
 export default function ProfileScreen() {
   const [userEmail, setUserEmail] = useState<string>('');
-  const [subscriptionTier, setSubscriptionTier] = useState<string>('Standard');
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string>('Active');
+  const [subscriptionLabel, setSubscriptionLabel] = useState<string>('Free');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -35,23 +38,10 @@ export default function ProfileScreen() {
 
       if (user) {
         setUserEmail(user.email || 'No email');
-
-        // Get subscription info
-        const { data: subData } = await supabase
-          .from('subscriptions')
-          .select('tier, status')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .single();
-
-        if (subData) {
-          setSubscriptionTier(
-            subData.tier === 'premium' ? 'Premium' : 'Standard'
-          );
-          setSubscriptionStatus(
-            subData.status.charAt(0).toUpperCase() + subData.status.slice(1)
-          );
-        }
+        const tier = await getCurrentTier();
+        setSubscriptionLabel(
+          tier === 'premium' ? 'Premium' : tier === 'standard' ? 'Standard' : 'Free'
+        );
       }
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -93,10 +83,10 @@ export default function ProfileScreen() {
 
   const handleDeleteAccount = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
+
     Alert.alert(
       'Delete Account',
-      'Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.',
+      'Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted. Any active subscription must be cancelled separately in your App Store settings.',
       [
         {
           text: 'Cancel',
@@ -105,11 +95,26 @@ export default function ProfileScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Coming Soon',
-              'Account deletion will be available in a future update. Please contact support for assistance.'
-            );
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              const { data, error } = await supabase.functions.invoke('delete-account', {
+                body: {},
+              });
+              if (error || !data?.ok) {
+                throw new Error(error?.message ?? data?.reason ?? 'Deletion failed');
+              }
+              await supabase.auth.signOut();
+              router.replace('/auth');
+            } catch (err) {
+              console.error('Account deletion failed:', err);
+              Alert.alert(
+                'Deletion Failed',
+                `We could not delete your account. Please try again or contact ${SUPPORT_EMAIL}.`
+              );
+            } finally {
+              setIsDeleting(false);
+            }
           },
         },
       ]
@@ -146,13 +151,11 @@ export default function ProfileScreen() {
               <Text style={styles.profileEmail}>{userEmail}</Text>
               <View style={styles.subscriptionBadge}>
                 <IconSymbol
-                  name={subscriptionTier === 'Premium' ? 'crown.fill' : 'star.fill'}
+                  name={subscriptionLabel === 'Premium' ? 'crown.fill' : 'star.fill'}
                   size={16}
                   color={colors.primary}
                 />
-                <Text style={styles.subscriptionText}>
-                  {subscriptionTier} • {subscriptionStatus}
-                </Text>
+                <Text style={styles.subscriptionText}>{subscriptionLabel}</Text>
               </View>
             </View>
           </Animated.View>
@@ -185,10 +188,7 @@ export default function ProfileScreen() {
                 style={styles.menuItem}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert(
-                    'Privacy Policy',
-                    'Privacy policy will be displayed here in a future update.'
-                  );
+                  WebBrowser.openBrowserAsync(LEGAL_URLS.privacy);
                 }}
                 activeOpacity={0.7}
               >
@@ -207,10 +207,7 @@ export default function ProfileScreen() {
                 style={styles.menuItem}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert(
-                    'Terms of Service',
-                    'Terms of service will be displayed here in a future update.'
-                  );
+                  WebBrowser.openBrowserAsync(LEGAL_URLS.terms);
                 }}
                 activeOpacity={0.7}
               >
@@ -229,10 +226,9 @@ export default function ProfileScreen() {
                 style={styles.menuItem}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  Alert.alert(
-                    'Help & Support',
-                    'For support, please email support@destinylines.app'
-                  );
+                  Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Destiny%20Lines%20Support`).catch(() => {
+                    Alert.alert('Help & Support', `For support, please email ${SUPPORT_EMAIL}`);
+                  });
                 }}
                 activeOpacity={0.7}
               >
@@ -258,11 +254,14 @@ export default function ProfileScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.deleteButton]}
+              style={[styles.deleteButton, isDeleting && { opacity: 0.5 }]}
               onPress={handleDeleteAccount}
+              disabled={isDeleting}
             >
               <IconSymbol name="trash.fill" size={20} color="#FF3B30" />
-              <Text style={[styles.actionButtonText, { color: '#FF3B30' }]}>Delete Account</Text>
+              <Text style={[styles.actionButtonText, { color: '#FF3B30' }]}>
+                {isDeleting ? 'Deleting…' : 'Delete Account'}
+              </Text>
             </TouchableOpacity>
           </Animated.View>
 

@@ -32,7 +32,7 @@ const carouselSlides = [
     icon: 'sparkles' as const,
     title: 'AI-Powered\nInsights',
     subtitle: 'Advanced Palm Analysis',
-    description: 'Our GPT-4 Vision AI analyzes your palm lines with incredible accuracy, revealing insights about your personality, relationships, and life path.',
+    description: 'Advanced AI vision analyzes the lines of your palm, revealing insights about your personality, relationships, and life path.',
   },
   {
     icon: 'party.popper.fill' as const,
@@ -69,13 +69,13 @@ export default function IntroScreen() {
         animated: true,
       });
     } else {
-      router.replace('/paywall');
+      router.replace('/onboarding');
     }
   };
 
   const handleSkip = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.replace('/paywall');
+    router.replace('/onboarding');
   };
 
   return (

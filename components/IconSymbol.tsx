@@ -161,7 +161,7 @@ const MAPPING = {
   "lightbulb.fill": "lightbulb",
   "moon.fill": "dark-mode",
   "sun.max.fill": "light-mode",
-} as Partial<
+} as unknown as Partial<
   Record<
     import("expo-symbols").SymbolViewProps["name"],
     React.ComponentProps<typeof MaterialIcons>["name"]
