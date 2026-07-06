@@ -133,7 +133,11 @@ Return your response as a JSON object with the following structure:
   }
 }
 
-If the image is not a clear photo of a human palm, return:
+Be lenient about image acceptance: if a human palm is visible anywhere in the image —
+even partially, at an angle, in imperfect lighting, or with multiple hands present —
+provide the reading for the most visible palm. Only reject the image if NO human palm
+is visible at all (e.g. a face, an object, an animal, a drawing, or a mannequin).
+If you must reject, return:
 {
   "ok": false,
   "reason": "Explanation of why the image is not valid"
